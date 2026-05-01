@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { adminClient } from "@/lib/db/clients";
 import { stripe } from "@/lib/stripe/client";
+import { isDepositRequired } from "@/lib/env";
 import {
   verifyCancelToken,
   tokenMatchesHash,
@@ -119,8 +120,14 @@ export async function POST(req: NextRequest) {
 
   const startsAt = new Date(reservation.service_starts_at);
   const hours = hoursUntilService(startsAt);
-  const tier = refundTier(hours, settings);
-  const refundCentavos = refundAmountCentavos(tier, reservation.deposit_centavos);
+  const depositFlow = isDepositRequired();
+  // Deposit-free flow: there's nothing to refund, so the tier is purely an
+  // audit label. Force "full" so cancellations don't show "no refund" copy
+  // that would confuse a guest who never paid in the first place.
+  const tier = depositFlow ? refundTier(hours, settings) : "full";
+  const refundCentavos = depositFlow
+    ? refundAmountCentavos(tier, reservation.deposit_centavos)
+    : 0;
 
   if (body.mode === "preview") {
     return NextResponse.json({

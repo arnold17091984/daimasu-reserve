@@ -3,17 +3,22 @@
  *
  * The atomic booking entry point.
  *
- * Flow:
- *  1. Validate input (zod)
- *  2. Lookup live settings + closed-dates + capacity (single RPC: assert_capacity_or_throw)
- *  3. INSERT reservation with status=pending_payment inside the same transaction
- *     (the RPC takes the FOR UPDATE lock; the INSERT inherits it)
- *  4. Issue HMAC self-cancel token, persist hash
- *  5. Create Stripe Checkout for the deposit, with idempotency_key bound to res.id
- *  6. Return { checkoutUrl }; client redirects.
+ * Two flows controlled by the `RESERVATIONS_DEPOSIT_REQUIRED` env flag:
  *
- * On any failure after step 3 we leave the reservation as `pending_payment` —
- * a daily Edge Function reaps stale ones older than 30 min (Phase 2).
+ * Deposit flow (flag=true, legacy):
+ *  1. Validate input (zod)
+ *  2. Atomic allocate + INSERT (status=pending_payment) via book_reservation_atomic
+ *  3. Issue HMAC self-cancel token, persist hash
+ *  4. Create Stripe Checkout, return { checkout_url }; client redirects.
+ *  5. Stripe webhook flips status to confirmed and dispatches the email + ping.
+ *  Stale pending_payment rows older than 30 min are reaped by /api/cron/reap-pending.
+ *
+ * Deposit-free flow (flag=false, used where Stripe is unavailable):
+ *  1. Same validate + atomic allocate, but with status=confirmed up front.
+ *  2. Send the guest confirmation email + admin Telegram ping inline
+ *     (sendConfirmationDispatch — same code path the webhook uses).
+ *  3. Return { reservation_id }; client redirects to /reservation/confirm.
+ *  No Stripe touchpoints, no pending_payment limbo, no reap-pending step.
  */
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
@@ -26,7 +31,8 @@ import {
   serviceStartsAt,
   priceBreakdown,
 } from "@/lib/domain/reservation";
-import { serverEnv } from "@/lib/env";
+import { serverEnv, isDepositRequired } from "@/lib/env";
+import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -118,6 +124,11 @@ export async function POST(req: NextRequest) {
   //    two-step flow (allocate then insert via two HTTP calls) released
   //    the FOR UPDATE lock between calls, allowing concurrent oversell.
   //    book_reservation_atomic() holds the lock until insert commits.
+  //    The status defaults to 'pending_payment' for the deposit flow and
+  //    is flipped to 'confirmed' up-front for the deposit-free flow so
+  //    the row never enters the pending limbo / reaper sweep.
+  const depositRequired = isDepositRequired();
+  const initialStatus = depositRequired ? "pending_payment" : "confirmed";
   const { data: bookedRow, error: bookErr } = await sb
     .rpc("book_reservation_atomic", {
       p_id: reservationId,
@@ -139,6 +150,7 @@ export async function POST(req: NextRequest) {
       p_source: "web",
       p_requested_seats: null,
       p_celebration: null,
+      p_status: initialStatus,
     })
     .single<Reservation>();
   if (bookErr || !bookedRow) {
@@ -153,7 +165,27 @@ export async function POST(req: NextRequest) {
   // seat_numbers is filled by the atomic RPC; surfaced for downstream
   // logging if needed (currently unused — Stripe metadata covers tracking).
 
-  // 5. Stripe Checkout (PHP). Idempotent per reservation.
+  // 5a. Deposit-free path: notify and return immediately, skip Stripe.
+  if (!depositRequired) {
+    try {
+      await sendConfirmationDispatch(bookedRow, sb);
+    } catch (err) {
+      // Notification failures must not roll back the booking — the row is
+      // already confirmed and the seat is allocated. Log only.
+      console.error("[reservations] sendConfirmationDispatch failed", err);
+    }
+    return NextResponse.json(
+      {
+        ok: true,
+        reservation_id: reservationId,
+        cancel_token: tokenBundle.token,
+        confirmed: true,
+      },
+      { status: 201 }
+    );
+  }
+
+  // 5b. Deposit path: Stripe Checkout (PHP). Idempotent per reservation.
   const env = serverEnv();
   const successUrl = `${env.NEXT_PUBLIC_SITE_URL}/reservation/confirm?session_id={CHECKOUT_SESSION_ID}&rid=${reservationId}`;
   const cancelUrl = `${env.NEXT_PUBLIC_SITE_URL}/reservation/abandoned?rid=${reservationId}`;

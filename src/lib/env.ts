@@ -12,10 +12,34 @@ const schema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
 
-  // Stripe (PH legal entity recommended for PHP charges)
-  STRIPE_SECRET_KEY: z.string().min(10),
-  STRIPE_WEBHOOK_SECRET: z.string().min(10),
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(10),
+  // Stripe (PH legal entity recommended for PHP charges).
+  // Optional: when RESERVATIONS_DEPOSIT_REQUIRED=false the deposit flow is
+  // disabled and these are unused. We still type them so existing keys
+  // remain valid; missing values are accepted.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+
+  // Master switch for the deposit / Stripe flow.
+  // - "true" (default): legacy flow — POST /api/reservations creates a Stripe
+  //   Checkout session, status starts as `pending_payment`, the webhook flips
+  //   to `confirmed` on payment success.
+  // - "false": deposit-free flow — reservations are inserted with status
+  //   `confirmed` directly, the confirmation email and admin Telegram ping
+  //   fire from the API handler, no Stripe calls anywhere. Use this where
+  //   Stripe is unavailable (Philippines acquiring etc.).
+  RESERVATIONS_DEPOSIT_REQUIRED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+
+  // Public mirror of RESERVATIONS_DEPOSIT_REQUIRED for client-side UI hints
+  // (deposit notice, CTA copy). The actual booking flow is decided server-
+  // side; this only changes presentation. Keep these two in sync.
+  NEXT_PUBLIC_RESERVATIONS_DEPOSIT_REQUIRED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
 
   // Resend (transactional email)
   RESEND_API_KEY: z.string().min(10),
@@ -80,4 +104,16 @@ export const publicEnv = {
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://reserve.daimasu.com.ph",
+  // Client-side UI hint only — actual booking flow is decided server-side.
+  // Defaults to true so unset envs preserve the legacy presentation.
+  depositRequired:
+    (process.env.NEXT_PUBLIC_RESERVATIONS_DEPOSIT_REQUIRED ?? "true") !== "false",
 } as const;
+
+/**
+ * Server-only convenience: is the deposit / Stripe path active?
+ * Defaults to true so existing deployments don't change behaviour.
+ */
+export function isDepositRequired(): boolean {
+  return read().RESERVATIONS_DEPOSIT_REQUIRED;
+}

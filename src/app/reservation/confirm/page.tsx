@@ -1,14 +1,20 @@
 /**
- * /reservation/confirm — Stripe Checkout success redirect.
+ * /reservation/confirm — post-booking success page.
  *
- * Stripe sends ?session_id=... and we additionally pass ?rid=. We verify the
- * reservation is in a confirmed state (or pending_payment if the webhook is
- * still in flight) and show a clean summary.
+ * Two entry paths:
+ *  - Deposit flow: Stripe Checkout success redirects here with session_id +
+ *    rid. The reservation is `pending_payment` until the webhook flips it.
+ *  - Deposit-free flow: the reservation API redirects here with rid only,
+ *    and the row is already `confirmed`.
+ *
+ * The page reads the row's status + deposit_centavos to pick the right
+ * copy; both paths share the same shell.
  */
 import Link from "next/link";
 import { CheckCircle2, Calendar, Users, Wallet } from "lucide-react";
 import { adminClient } from "@/lib/db/clients";
 import { formatPHP } from "@/lib/domain/reservation";
+import { isDepositRequired } from "@/lib/env";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -41,6 +47,7 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
   const lang = reservation.guest_lang;
   const t = (ja: string, en: string) => (lang === "ja" ? ja : en);
 
+  const depositFlow = isDepositRequired();
   const isPending = reservation.status === "pending_payment";
   const isConfirmed = reservation.status === "confirmed";
 
@@ -53,14 +60,17 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
             <CheckCircle2 size={56} className="text-gold" aria-hidden="true" />
           </div>
 
-          {/* heading */}
+          {/* heading — three states:
+              - deposit flow + confirmed: "Reservation Confirmed"
+              - deposit flow + still pending: "Payment Received" (webhook in flight)
+              - deposit-free flow: always "Reservation Confirmed" */}
           <h1 className="mb-3 text-center font-[family-name:var(--font-noto-serif)] text-3xl font-medium tracking-[0.04em] text-foreground sm:text-4xl">
-            {isConfirmed
-              ? t("ご予約を承りました", "Reservation Confirmed")
-              : t("お支払いを受け付けました", "Payment Received")}
+            {isPending && depositFlow
+              ? t("お支払いを受け付けました", "Payment Received")
+              : t("ご予約を承りました", "Reservation Confirmed")}
           </h1>
           <p className="mb-10 text-center text-sm leading-relaxed text-text-secondary">
-            {isPending
+            {isPending && depositFlow
               ? t(
                   "決済を確認中です。確認メールが数十秒以内に届きます。",
                   "Verifying payment. A confirmation email arrives shortly."
@@ -83,16 +93,26 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
               label={t("人数", "Party")}
               value={`${reservation.party_size}`}
             />
-            <Row
-              icon={<Wallet size={16} aria-hidden="true" />}
-              label={t("デポジット (お支払済み)", "Deposit (paid)")}
-              value={formatPHP(reservation.deposit_centavos, lang)}
-            />
-            <Row
-              icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}
-              label={t("当日お支払い", "Balance on arrival")}
-              value={formatPHP(reservation.balance_centavos, lang)}
-            />
+            {depositFlow ? (
+              <>
+                <Row
+                  icon={<Wallet size={16} aria-hidden="true" />}
+                  label={t("デポジット (お支払済み)", "Deposit (paid)")}
+                  value={formatPHP(reservation.deposit_centavos, lang)}
+                />
+                <Row
+                  icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}
+                  label={t("当日お支払い", "Balance on arrival")}
+                  value={formatPHP(reservation.balance_centavos, lang)}
+                />
+              </>
+            ) : (
+              <Row
+                icon={<Wallet size={16} aria-hidden="true" />}
+                label={t("当日お支払い", "Payment on arrival")}
+                value={formatPHP(reservation.total_centavos, lang)}
+              />
+            )}
           </dl>
 
           {/* policy */}
@@ -101,10 +121,15 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
               {t("キャンセルポリシー", "Cancellation policy")}
             </p>
             <p className="text-xs leading-relaxed text-text-muted">
-              {t(
-                `ご来店の ${settings?.refund_full_hours ?? 48} 時間前まで 100% / ${settings?.refund_partial_hours ?? 24} 時間前まで 50% を返金いたします。それ以降のキャンセルは返金いたしかねます。確認メール内のキャンセルリンクから 24 時間 365 日承ります。`,
-                `${settings?.refund_full_hours ?? 48}h+ before arrival: 100% refund. ${settings?.refund_partial_hours ?? 24}h+: 50%. Less: 0%. Manage via the link in your confirmation email.`
-              )}
+              {depositFlow
+                ? t(
+                    `ご来店の ${settings?.refund_full_hours ?? 48} 時間前まで 100% / ${settings?.refund_partial_hours ?? 24} 時間前まで 50% を返金いたします。それ以降のキャンセルは返金いたしかねます。確認メール内のキャンセルリンクから 24 時間 365 日承ります。`,
+                    `${settings?.refund_full_hours ?? 48}h+ before arrival: 100% refund. ${settings?.refund_partial_hours ?? 24}h+: 50%. Less: 0%. Manage via the link in your confirmation email.`
+                  )
+                : t(
+                    "ご都合が変わった場合、確認メール内のキャンセルリンクから 24 時間 365 日承ります。お支払いは当日現地のため返金処理はございません。",
+                    "Plans change — cancel any time via the link in your confirmation email. Since payment is on-site there is no refund step."
+                  )}
             </p>
           </div>
 

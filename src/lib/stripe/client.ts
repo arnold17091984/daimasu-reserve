@@ -10,7 +10,18 @@ let cached: Stripe | null = null;
 
 export function stripe(): Stripe {
   if (cached) return cached;
-  cached = new Stripe(serverEnv().STRIPE_SECRET_KEY, {
+  const key = serverEnv().STRIPE_SECRET_KEY;
+  if (!key) {
+    // Should never reach this branch in production: every caller is gated
+    // by isDepositRequired() before touching the Stripe client. If it does
+    // fire, the env is misconfigured (deposit flow on, key missing) and we
+    // want to fail loud rather than send a malformed Stripe call.
+    throw new Error(
+      "STRIPE_SECRET_KEY is unset but the deposit flow attempted to call Stripe. " +
+        "Either set RESERVATIONS_DEPOSIT_REQUIRED=false or provide the key."
+    );
+  }
+  cached = new Stripe(key, {
     // Pin API version; bumping this is an Orange-tier action (potential
     // breakage of webhook payload shape).
     apiVersion: "2026-04-22.dahlia",

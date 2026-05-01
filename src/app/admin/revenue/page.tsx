@@ -7,11 +7,12 @@
  * no-show / kept / lost. Inspired by Airレジ's 日別売上 view.
  */
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingUp, Info } from "lucide-react";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
 import { adminClient } from "@/lib/db/clients";
 import { formatPHP } from "@/lib/domain/reservation";
+import { isDepositRequired } from "@/lib/env";
 import type { RevenueDaily, RevenueMonthly } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -37,11 +38,27 @@ export default async function RevenuePage({
   const monthStart = isoFirstOfMonth(targetY, targetM);
   const monthEnd = isoLastOfMonth(targetY, targetM);
 
-  let monthly: RevenueMonthly | null = null;
-  let daily: RevenueDaily[] = [];
-
   await requireAdminOrRedirect();
   const sb = adminClient();
+
+  // Deposit-free flow: revenue views (revenue_daily / revenue_monthly) are
+  // built from `payments` rows that no longer exist. Render a covers-only
+  // summary instead so the page isn't a wall of zeros and ₱0.
+  if (!isDepositRequired()) {
+    return (
+      <ReservationsOnlyView
+        lang={lang}
+        sb={sb}
+        targetY={targetY}
+        targetM={targetM}
+        monthStart={monthStart}
+        monthEnd={monthEnd}
+      />
+    );
+  }
+
+  let monthly: RevenueMonthly | null = null;
+  let daily: RevenueDaily[] = [];
   const [{ data: m }, { data: d }] = await Promise.all([
     sb
       .from("revenue_monthly")
@@ -364,6 +381,108 @@ export default async function RevenuePage({
           )}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Deposit-free / Stripe-disabled view. The revenue_daily / revenue_monthly
+ * views aggregate `payments` rows that no longer exist, so the regular
+ * revenue dashboard is meaningless here — we render a covers-only summary
+ * (counts by status, party-size sum) drawn directly from `reservations`.
+ */
+async function ReservationsOnlyView({
+  lang,
+  sb,
+  targetY,
+  targetM,
+  monthStart,
+  monthEnd,
+}: {
+  lang: AdminLang;
+  sb: ReturnType<typeof adminClient>;
+  targetY: number;
+  targetM: number;
+  monthStart: string;
+  monthEnd: string;
+}) {
+  const { data: rows } = await sb
+    .from("reservations")
+    .select("status, party_size, service_date")
+    .gte("service_date", monthStart)
+    .lte("service_date", monthEnd)
+    .returns<{ status: string; party_size: number; service_date: string }[]>();
+
+  const list = rows ?? [];
+  const total = list.length;
+  const covers = list.reduce((acc, r) => acc + r.party_size, 0);
+  const byStatus: Record<string, number> = {};
+  for (const r of list) {
+    byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
+  }
+  const confirmed = byStatus.confirmed ?? 0;
+  const cancelled =
+    (byStatus.cancelled_full ?? 0) +
+    (byStatus.cancelled_partial ?? 0) +
+    (byStatus.cancelled_late ?? 0);
+  const noShow = byStatus.no_show ?? 0;
+  const completed = byStatus.completed ?? 0;
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-[family-name:var(--font-noto-serif)] text-2xl font-medium tracking-[0.04em] text-foreground sm:text-3xl">
+            <TrendingUp size={20} className="mr-2 inline-block text-gold" />
+            {ti(lang, "予約サマリー", "Reservations Summary")}
+          </h1>
+          <p className="mt-2 text-xs leading-relaxed text-text-muted">
+            {ti(
+              lang,
+              `${targetY}年 ${monthName(targetM, lang)}`,
+              `${monthName(targetM, lang)} ${targetY}`
+            )}
+          </p>
+        </div>
+        <MonthPicker year={targetY} month={targetM} lang={lang} />
+      </div>
+
+      <div className="mb-4 flex items-start gap-3 border border-border bg-surface/40 p-4 text-xs leading-relaxed text-text-muted">
+        <Info size={16} className="mt-0.5 flex-shrink-0 text-gold/70" />
+        <p>
+          {ti(
+            lang,
+            "デポジット非収受モードのため、売上データは記録されていません。予約件数のみ表示しています。",
+            "Deposit-free mode is active — payment data is not recorded. Reservation counts only."
+          )}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <Stat label={ti(lang, "予約件数", "Reservations")} value={String(total)} />
+        <Stat label={ti(lang, "総客数", "Covers")} value={String(covers)} />
+        <Stat label={ti(lang, "確定", "Confirmed")} value={String(confirmed)} />
+        <Stat label={ti(lang, "完了", "Completed")} value={String(completed)} />
+        <Stat
+          label={ti(lang, "キャンセル", "Cancelled")}
+          value={String(cancelled + noShow)}
+        />
+      </div>
+
+      <p className="mt-6 text-[11px] leading-relaxed text-text-muted">
+        {ti(
+          lang,
+          "予約一覧の管理は ",
+          "Manage individual reservations in "
+        )}
+        <Link
+          href="/admin/reservations"
+          className="text-gold underline underline-offset-2 hover:text-gold-light"
+        >
+          /admin/reservations
+        </Link>
+        {ti(lang, " から行えます。", ".")}
+      </p>
     </div>
   );
 }

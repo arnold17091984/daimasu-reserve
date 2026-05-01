@@ -17,21 +17,35 @@ import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe/client";
 import { adminClient } from "@/lib/db/clients";
-import { serverEnv } from "@/lib/env";
-import {
-  renderConfirmEmail,
-  renderTelegramConfirm,
-} from "@/lib/notifications/templates";
-import { sendEmail } from "@/lib/notifications/email";
-import { notifyTelegram } from "@/lib/notifications/telegram";
-import { issueCancelToken } from "@/lib/security/cancel-token";
-import type { Reservation, RestaurantSettings } from "@/lib/db/types";
+import { serverEnv, isDepositRequired } from "@/lib/env";
+import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
+import type { Reservation } from "@/lib/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  // Hard-disable when the deposit flow is off. Any inbound Stripe call
+  // is either a stale webhook from a prior deployment or hostile noise
+  // — in both cases we want the loud 410 rather than silently passing
+  // signature verification on a key the operator no longer manages.
+  if (!isDepositRequired()) {
+    return NextResponse.json(
+      { ok: false, reason: "stripe_disabled" },
+      { status: 410 }
+    );
+  }
+
   const env = serverEnv();
+  // Fail loud rather than passing undefined into constructEvent — same
+  // rationale as the stripe() singleton: if the deposit flow is on, the
+  // secret must be present.
+  if (!env.STRIPE_WEBHOOK_SECRET) {
+    return NextResponse.json(
+      { ok: false, reason: "stripe_webhook_secret_missing" },
+      { status: 500 }
+    );
+  }
   const sig = req.headers.get("stripe-signature");
   if (!sig) {
     return NextResponse.json({ ok: false, reason: "missing_signature" }, { status: 400 });
@@ -192,8 +206,8 @@ async function onCheckoutCompleted(event: Stripe.Event, sb: SbClient) {
     after_data: { stripe_event: event.id, payment_intent: session.payment_intent } as never,
   });
 
-  // 4. Notify customer + ops
-  await sendConfirmAndPing(updated, sb);
+  // 4. Notify customer + ops (shared with the deposit-free flow)
+  await sendConfirmationDispatch(updated, sb);
 }
 
 async function onChargeRefunded(event: Stripe.Event, sb: SbClient) {
@@ -242,56 +256,3 @@ async function onPaymentFailed(event: Stripe.Event, sb: SbClient) {
   });
 }
 
-async function sendConfirmAndPing(reservation: Reservation, sb: SbClient) {
-  const env = serverEnv();
-  const { data: settings } = await sb
-    .from("restaurant_settings")
-    .select("*")
-    .eq("id", 1)
-    .single<RestaurantSettings>();
-  if (!settings) return;
-
-  // Re-issue the cancel token at confirm time so the email's bearer link is the
-  // canonical credential. The hash is rotated in DB; the raw token in the email
-  // is the only thing that can pass /cancel?token=… verification.
-  const fresh = await issueCancelToken(reservation.id);
-  await sb
-    .from("reservations")
-    .update({
-      cancel_token_hash: fresh.hash,
-      cancel_token_expires_at: fresh.expiresAt.toISOString(),
-    })
-    .eq("id", reservation.id);
-
-  const cancelUrl = `${env.NEXT_PUBLIC_SITE_URL}/cancel?token=${encodeURIComponent(fresh.token)}`;
-
-  const { subject, html } = renderConfirmEmail({ reservation, settings, cancelUrl });
-  // Codex P2 fix: previously the return value was ignored. Resend / network
-  // failures silently disappeared and the operator had no signal that the
-  // diner never received their cancel link. Now: failures escalate via
-  // Telegram so the operator can manually re-send (and the notification_log
-  // already captured the failure detail via sendEmail's `log` arg).
-  const emailRes = await sendEmail({
-    to: reservation.guest_email,
-    subject,
-    html,
-    idempotencyKey: `email:confirm:${reservation.id}`,
-    log: { reservation_id: reservation.id, kind: "guest_confirm" },
-  });
-
-  if (!emailRes.ok) {
-    await notifyTelegram({
-      text: `<b>⚠ Confirmation email FAILED</b>\nReservation: <code>${reservation.id}</code>\nGuest: ${reservation.guest_name} &lt;${reservation.guest_email}&gt;\nReason: ${emailRes.error}`,
-      tokenOverride: settings.telegram_bot_token,
-      chatIdOverride: settings.telegram_chat_id,
-      log: { reservation_id: reservation.id, kind: "admin_alert" },
-    });
-  }
-
-  await notifyTelegram({
-    text: renderTelegramConfirm(reservation),
-    tokenOverride: settings.telegram_bot_token,
-    chatIdOverride: settings.telegram_chat_id,
-    log: { reservation_id: reservation.id, kind: "admin_alert" },
-  });
-}

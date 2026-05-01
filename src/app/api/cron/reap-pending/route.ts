@@ -16,6 +16,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { stripe } from "@/lib/stripe/client";
 import { verifyCronAuth } from "@/lib/security/cron-auth";
+import { isDepositRequired } from "@/lib/env";
 import type { Reservation } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -24,6 +25,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   if (!verifyCronAuth(req.headers.get("authorization"))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+  // Deposit-free flow has no `pending_payment` rows by construction
+  // (book_reservation_atomic is called with p_status='confirmed'). The
+  // Supabase pg_cron schedule may still be hitting us; ack the call so it
+  // doesn't show as a failure, but do nothing.
+  if (!isDepositRequired()) {
+    return NextResponse.json({ ok: true, skipped: "stripe_disabled", reaped: 0 });
   }
   const sb = adminClient();
   // 45-min cutoff: Stripe Checkout default expiry is 30 min, plus 15-min buffer

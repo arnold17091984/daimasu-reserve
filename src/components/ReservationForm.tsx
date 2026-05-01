@@ -6,6 +6,9 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useLang } from "@/lib/language";
 import { CONTACT, COURSE_PRICE } from "@/lib/constants";
+import { publicEnv } from "@/lib/env";
+
+const DEPOSIT_REQUIRED = publicEnv.depositRequired;
 
 const SEATINGS = [
   { value: "s1" as const, label: { ja: "1部 17:30", en: "Seating 1 · 17:30" } },
@@ -51,8 +54,11 @@ function toIsoDate(d: Date): string {
 interface ApiOk {
   ok: true;
   reservation_id: string;
-  checkout_url: string;
   cancel_token: string;
+  /** Present in the deposit flow — redirect target for Stripe Checkout. */
+  checkout_url?: string;
+  /** Present in the deposit-free flow — booking is already confirmed. */
+  confirmed?: boolean;
 }
 interface ApiErr {
   ok: false;
@@ -134,7 +140,12 @@ export default function ReservationForm() {
       } catch {
         /* private mode etc. — ignore */
       }
-      window.location.href = data.checkout_url;
+      // Deposit flow → Stripe Checkout. Deposit-free flow → confirm page.
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        window.location.href = `/reservation/confirm?rid=${encodeURIComponent(data.reservation_id)}`;
+      }
     } catch {
       setStatus("error");
       setErrorMsg(
@@ -164,10 +175,15 @@ export default function ReservationForm() {
           )}
         </h3>
         <p className="text-sm leading-relaxed text-text-secondary">
-          {t(
-            "ご希望の日・時間・人数をお選びください。お席の確保にはデポジット (50%) のお支払いが必要です。確認メールが即時に届きます。",
-            "Pick a date, a seating, and party size. A 50% deposit secures your seat; a confirmation email arrives instantly."
-          )}
+          {DEPOSIT_REQUIRED
+            ? t(
+                "ご希望の日・時間・人数をお選びください。お席の確保にはデポジット (50%) のお支払いが必要です。確認メールが即時に届きます。",
+                "Pick a date, a seating, and party size. A 50% deposit secures your seat; a confirmation email arrives instantly."
+              )
+            : t(
+                "ご希望の日・時間・人数をお選びください。送信後すぐに確認メールが届き、ご予約が成立いたします。",
+                "Pick a date, a seating, and party size. A confirmation email arrives instantly and your seat is held."
+              )}
         </p>
       </div>
 
@@ -379,14 +395,19 @@ export default function ReservationForm() {
         </div>
 
         <div className="flex flex-col gap-3 pt-2">
-          {/* Deposit notice */}
+          {/* Deposit notice (deposit flow) — booking-policy notice (deposit-free flow) */}
           <div className="flex items-start gap-3 border border-gold/30 bg-gold/[0.04] p-4">
             <ShieldCheck size={18} className="mt-0.5 flex-shrink-0 text-gold" aria-hidden="true" />
             <p className="text-[12px] leading-relaxed text-text-secondary">
-              {t(
-                "次の画面で 50% デポジットのお支払い (Stripe) に進みます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
-                "Next: pay a 50% deposit via Stripe. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
-              )}
+              {DEPOSIT_REQUIRED
+                ? t(
+                    "次の画面で 50% デポジットのお支払い (Stripe) に進みます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
+                    "Next: pay a 50% deposit via Stripe. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
+                  )
+                : t(
+                    "送信後すぐに確認メールが届き、ご予約が成立いたします。お支払いは当日現地で承ります（現金 / カード / GCash）。ご都合が変わった場合、確認メール内のリンクから 24 時間 365 日キャンセルいただけます。",
+                    "After submission a confirmation email arrives instantly and your seat is held. Payment is settled on-site (cash / card / GCash). You may cancel any time via the link in your confirmation email."
+                  )}
             </p>
             <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
               {t(
@@ -423,12 +444,16 @@ export default function ReservationForm() {
             ) : status === "redirecting" ? (
               <>
                 <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-                {t("Stripe へ移動中...", "Redirecting to Stripe...")}
+                {DEPOSIT_REQUIRED
+                  ? t("Stripe へ移動中...", "Redirecting to Stripe...")
+                  : t("予約を確定中...", "Finalising reservation...")}
               </>
             ) : (
               <>
                 <Send size={16} aria-hidden="true" />
-                {t("お席を確保 → デポジットへ", "Hold seat → Pay deposit")}
+                {DEPOSIT_REQUIRED
+                  ? t("お席を確保 → デポジットへ", "Hold seat → Pay deposit")
+                  : t("予約を確定する", "Reserve")}
               </>
             )}
           </button>
@@ -493,10 +518,15 @@ export default function ReservationForm() {
       </div>
 
       <p className="text-[11px] leading-relaxed tracking-wide text-text-muted">
-        {t(
-          `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)・デポジット50%は Stripe・残金は現地払い(現金 / カード / GCash)。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
-          `Course ${COURSE_PRICE.amount} per guest (tax & service not included). 50% deposit via Stripe; balance on-site (cash / card / GCash). 100% refund up to 48h, 50% up to 24h.`
-        )}
+        {DEPOSIT_REQUIRED
+          ? t(
+              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)・デポジット50%は Stripe・残金は現地払い(現金 / カード / GCash)。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
+              `Course ${COURSE_PRICE.amount} per guest (tax & service not included). 50% deposit via Stripe; balance on-site (cash / card / GCash). 100% refund up to 48h, 50% up to 24h.`
+            )
+          : t(
+              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)。お支払いは当日現地で承ります(現金 / カード / GCash)。キャンセルはいつでも承ります。`,
+              `Course ${COURSE_PRICE.amount} per guest (tax & service not included). Payment is settled on-site (cash / card / GCash). Cancel any time.`
+            )}
       </p>
     </div>
   );
