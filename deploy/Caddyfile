@@ -1,0 +1,38 @@
+# Caddy 2 reverse proxy for the Vultr VPS.
+# - Auto-provisions Let's Encrypt cert for reserve.daimasu.com.ph
+# - HSTS, security headers
+# - Forwards to the Next.js standalone server on port 3000
+
+reserve.daimasu.com.ph {
+    encode zstd gzip
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Frame-Options "DENY"
+        # CSP — tighten per page in Next response headers if needed
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://api.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://api.stripe.com https://api.telegram.org; frame-src https://js.stripe.com https://hooks.stripe.com; font-src 'self' data:;"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    # Stripe webhook needs the raw body — no mods.
+    @stripe path /api/webhooks/stripe
+    handle @stripe {
+        reverse_proxy app:3000
+    }
+
+    # Static asset cache hint (Next adds its own; this is a backstop).
+    @static path *.css *.js *.woff2 *.png *.svg *.ico *.webp *.jpg *.jpeg *.mp4
+    handle @static {
+        header Cache-Control "public, max-age=31536000, immutable"
+        reverse_proxy app:3000
+    }
+
+    # Everything else
+    handle {
+        reverse_proxy app:3000
+    }
+}

@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+.git
+.env*
+!.env.example
+*.md
+docs/
+supabase/
+.github/
+lighthouse-*
+lh-*.json
+lh-*.html
+*.png
+*.psd
+*.fig

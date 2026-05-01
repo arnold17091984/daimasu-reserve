@@ -1,0 +1,50 @@
+# Production docker-compose for the Vultr VPS.
+# Caddy fronts the Next app, terminates TLS via Let's Encrypt for reserve.daimasu.com.ph.
+#
+# Deploy via GitHub Actions (`.github/workflows/deploy.yml`):
+#   1. Build image on the runner, push to ghcr.io/<owner>/daimasu-bar:<sha>
+#   2. ssh into Vultr → docker compose pull && docker compose up -d
+#
+# First-time setup: see docs/SETUP.md
+
+services:
+  app:
+    image: ghcr.io/${GHCR_OWNER:-kjh960120-dev}/daimasu-bar:${IMAGE_TAG:-latest}
+    container_name: daimasu-app
+    restart: unless-stopped
+    env_file:
+      - /opt/daimasu/.env.production
+    expose:
+      - "3000"
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: daimasu-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/daimasu/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - web
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  web:
+    driver: bridge

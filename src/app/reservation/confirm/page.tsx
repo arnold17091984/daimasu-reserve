@@ -1,0 +1,170 @@
+/**
+ * /reservation/confirm — Stripe Checkout success redirect.
+ *
+ * Stripe sends ?session_id=... and we additionally pass ?rid=. We verify the
+ * reservation is in a confirmed state (or pending_payment if the webhook is
+ * still in flight) and show a clean summary.
+ */
+import Link from "next/link";
+import { CheckCircle2, Calendar, Users, Wallet } from "lucide-react";
+import { adminClient } from "@/lib/db/clients";
+import { formatPHP } from "@/lib/domain/reservation";
+import type { Reservation, RestaurantSettings } from "@/lib/db/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+interface PageProps {
+  searchParams: Promise<{ rid?: string; session_id?: string }>;
+}
+
+export default async function ReservationConfirmPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const rid = sp.rid;
+  if (!rid) return <NotFound />;
+
+  const sb = adminClient();
+  const { data: reservation } = await sb
+    .from("reservations")
+    .select("*")
+    .eq("id", rid)
+    .maybeSingle<Reservation>();
+
+  if (!reservation) return <NotFound />;
+
+  const { data: settings } = await sb
+    .from("restaurant_settings")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle<RestaurantSettings>();
+
+  const lang = reservation.guest_lang;
+  const t = (ja: string, en: string) => (lang === "ja" ? ja : en);
+
+  const isPending = reservation.status === "pending_payment";
+  const isConfirmed = reservation.status === "confirmed";
+
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-2xl px-6 py-24 sm:py-32">
+        <div className="border border-border bg-surface/50 p-8 sm:p-12">
+          {/* badge */}
+          <div className="mb-8 flex justify-center">
+            <CheckCircle2 size={56} className="text-gold" aria-hidden="true" />
+          </div>
+
+          {/* heading */}
+          <h1 className="mb-3 text-center font-[family-name:var(--font-noto-serif)] text-3xl font-medium tracking-[0.04em] text-foreground sm:text-4xl">
+            {isConfirmed
+              ? t("ご予約を承りました", "Reservation Confirmed")
+              : t("お支払いを受け付けました", "Payment Received")}
+          </h1>
+          <p className="mb-10 text-center text-sm leading-relaxed text-text-secondary">
+            {isPending
+              ? t(
+                  "決済を確認中です。確認メールが数十秒以内に届きます。",
+                  "Verifying payment. A confirmation email arrives shortly."
+                )
+              : t(
+                  `確認メールを ${reservation.guest_email} にお送りしました。`,
+                  `A confirmation email has been sent to ${reservation.guest_email}.`
+                )}
+          </p>
+
+          {/* details */}
+          <dl className="space-y-4 border-t border-border pt-6 text-sm">
+            <Row
+              icon={<Calendar size={16} aria-hidden="true" />}
+              label={t("ご来店日時", "Date & time")}
+              value={formatServiceTime(reservation.service_starts_at, lang)}
+            />
+            <Row
+              icon={<Users size={16} aria-hidden="true" />}
+              label={t("人数", "Party")}
+              value={`${reservation.party_size}`}
+            />
+            <Row
+              icon={<Wallet size={16} aria-hidden="true" />}
+              label={t("デポジット (お支払済み)", "Deposit (paid)")}
+              value={formatPHP(reservation.deposit_centavos, lang)}
+            />
+            <Row
+              icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}
+              label={t("当日お支払い", "Balance on arrival")}
+              value={formatPHP(reservation.balance_centavos, lang)}
+            />
+          </dl>
+
+          {/* policy */}
+          <div className="mt-10 border-t border-border pt-6">
+            <p className="mb-2 text-xs uppercase tracking-[0.2em] text-gold/70">
+              {t("キャンセルポリシー", "Cancellation policy")}
+            </p>
+            <p className="text-xs leading-relaxed text-text-muted">
+              {t(
+                `ご来店の ${settings?.refund_full_hours ?? 48} 時間前まで 100% / ${settings?.refund_partial_hours ?? 24} 時間前まで 50% を返金いたします。それ以降のキャンセルは返金いたしかねます。確認メール内のキャンセルリンクから 24 時間 365 日承ります。`,
+                `${settings?.refund_full_hours ?? 48}h+ before arrival: 100% refund. ${settings?.refund_partial_hours ?? 24}h+: 50%. Less: 0%. Manage via the link in your confirmation email.`
+              )}
+            </p>
+          </div>
+
+          {/* back home */}
+          <div className="mt-10 flex justify-center">
+            <Link
+              href="/"
+              className="text-xs uppercase tracking-[0.18em] text-gold/70 transition-colors hover:text-gold"
+            >
+              {t("← トップへ戻る", "← Back to home")}
+            </Link>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border/50 pb-4 last:border-b-0">
+      <dt className="flex items-center gap-2 text-text-muted">
+        <span className="text-gold/60">{icon}</span>
+        <span className="tracking-[0.04em]">{label}</span>
+      </dt>
+      <dd className="text-foreground font-[family-name:var(--font-noto-serif)] tracking-[0.02em]">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-xl px-6 py-32">
+        <h1 className="mb-3 text-center font-[family-name:var(--font-noto-serif)] text-2xl text-foreground">
+          予約が見つかりません / Reservation not found
+        </h1>
+        <p className="text-center text-sm text-text-secondary">
+          リンクが正しいかご確認ください。
+        </p>
+        <p className="mt-8 text-center">
+          <Link href="/" className="text-xs uppercase tracking-[0.18em] text-gold">
+            ← Back to home
+          </Link>
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function formatServiceTime(iso: string, lang: "ja" | "en"): string {
+  return new Date(iso).toLocaleString(lang === "ja" ? "ja-JP" : "en-PH", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

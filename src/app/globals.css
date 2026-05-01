@@ -1,0 +1,585 @@
+@import "tailwindcss";
+
+:root {
+  /* TOP design spec palette (2026-04-24) */
+  --background: #0b0b0b;
+  --foreground: #ffffff;
+  --gold: #d4af37;           /* main gold */
+  --gold-light: #f2d47a;     /* highlight */
+  --gold-soft: #cbb98a;      /* beige text / subtle lines */
+  --gold-dark: #a68e64;      /* deep text */
+  --gold-deep: #a68e64;      /* alias — button bevel bottom */
+  --gold-highlight: #f2d47a; /* alias — button bevel top */
+  --brown-dark: #1a1206;     /* dark brown — gold-button label */
+  --text-secondary: #cbb98a;
+  --text-muted: #a68e64;
+  --surface: #141414;
+  --card: #1a1a1a;
+  --border: #2a2420;
+  --border-gold: rgba(212, 175, 55, 0.25);
+  --transition-ceremony: 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-soft: var(--gold-soft);
+  --color-gold-dark: var(--gold-dark);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-border-gold: var(--border-gold);
+
+  --font-sans: var(--font-noto-sans), sans-serif;
+  --font-serif: var(--font-noto-serif), var(--font-shippori), serif;
+  --font-display: var(--font-noto-serif), var(--font-cinzel), var(--font-cormorant), serif;
+  --font-cinzel-stack: var(--font-cinzel), serif;
+
+  --transition-ceremony: var(--transition-ceremony);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--gold);
+  color: var(--background);
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold), var(--gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gold-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold) 50%, transparent);
+}
+
+/* Hero — Primary CTA 「ご予約はこちら」
+   Warm brass bevel with specular highlight, warm drop glow, sharp corners. */
+.btn-gold-ornate {
+  color: var(--brown-dark);
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 35%),
+    linear-gradient(180deg, var(--gold-light), var(--gold) 52%, #b58a25);
+  border: 1px solid #f8dc82;
+  box-shadow:
+    0 10px 28px rgba(212, 175, 55, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -4px 10px rgba(86, 54, 0, 0.24);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+}
+.btn-gold-ornate:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+  box-shadow:
+    0 14px 34px rgba(212, 175, 55, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -4px 10px rgba(86, 54, 0, 0.24);
+}
+.btn-gold-ornate:active {
+  filter: brightness(0.96);
+}
+
+/* Hero — Secondary CTA 「WhatsAppでお問い合わせ」 + chapter badge outline.
+   Translucent black fill, 1px gold border, backdrop blur. Sharp corners. */
+.btn-ornate-ghost {
+  --frame-border: rgba(212, 175, 55, 0.85);
+  color: var(--gold);
+  border: 1px solid var(--frame-border);
+  background-color: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(4px);
+  box-shadow:
+    inset 0 0 18px rgba(212, 175, 55, 0.06),
+    0 8px 22px rgba(0, 0, 0, 0.45);
+  transition: transform 0.25s ease, background-color 0.3s, border-color 0.3s;
+}
+.btn-ornate-ghost:hover {
+  transform: translateY(-2px);
+  background-color: rgba(212, 175, 55, 0.1);
+}
+
+/* Dark gaussian halo behind hero text — multi-layer so the character
+   outlines are fully separated from the owl video underneath. */
+.text-shadow-hero {
+  text-shadow:
+    0 0 32px rgba(0, 0, 0, 0.95),
+    0 0 16px rgba(0, 0, 0, 0.85),
+    0 2px 6px rgba(0, 0, 0, 0.75);
+}
+
+/* Gold-accented variant: preserves the warm glow while still adding a
+   dark halo underneath for legibility. Used on the price line. */
+.text-shadow-hero-gold {
+  text-shadow:
+    0 0 20px rgba(0, 0, 0, 0.9),
+    0 0 10px rgba(0, 0, 0, 0.75),
+    0 0 16px rgba(212, 175, 55, 0.35),
+    0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Hero ornament — 180px gold line with two diamond motifs set 76px from each edge. */
+.ornate-divider {
+  position: relative;
+  display: block;
+  width: 180px;
+  height: 1px;
+  opacity: 0.85;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+.ornate-divider::before,
+.ornate-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  background: var(--gold);
+  transform: translateY(-50%) rotate(45deg);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.7);
+}
+.ornate-divider::before { left: 76px; }
+.ornate-divider::after { right: 76px; }
+
+/* Top gold gradient for the accent character in H1 (食卓). */
+.text-gold-gradient-title {
+  background: linear-gradient(180deg, #fff0ad 0%, #d4af37 45%, #9d7418 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  text-shadow: none;
+}
+
+/* Seat-count frame — top/bottom gold borders with centered diamond markers. */
+.limited-frame {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  padding: 22px 0;
+  border-top: 1px solid rgba(212, 175, 55, 0.35);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+}
+.limited-frame::before,
+.limited-frame::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  background: var(--gold);
+  transform: translateX(-50%) rotate(45deg);
+}
+.limited-frame::before { top: -4px; }
+.limited-frame::after  { bottom: -4px; }
+
+/* Down chevron float animation for hero bottom indicator. */
+@keyframes hero-floatdown {
+  0%, 100% { transform: translateY(0); opacity: 0.55; }
+  50%      { transform: translateY(8px); opacity: 1; }
+}
+.hero-float-down {
+  animation: hero-floatdown 1.8s ease-in-out infinite;
+}
+
+/* DayPicker — DAIMASU gold theme override.
+   Scoped to `.rdp-daimasu .rdp-root` so our variables beat the library's own
+   `.rdp { --rdp-day-width: 44px }` defaults (which would otherwise re-declare
+   the variables at a deeper element and win the cascade). */
+.rdp-daimasu {
+  max-width: 100%;
+  overflow: hidden;
+}
+.rdp-daimasu .rdp-root {
+  --rdp-accent-color: var(--gold);
+  --rdp-accent-background-color: rgba(212, 175, 55, 0.18);
+  --rdp-today-color: var(--gold);
+  --rdp-background-color: transparent;
+  /* Tap-target bumped to Apple HIG 44px minimum for mobile conversion. */
+  --rdp-day-height: 2.75rem;
+  --rdp-day-width: 2.75rem;
+  --rdp-day_button-height: 2.75rem;
+  --rdp-day_button-width: 2.75rem;
+  --rdp-day_button-border-radius: 0;
+  --rdp-selected-border: 1px solid var(--gold);
+  --rdp-weekday-text-transform: uppercase;
+  --rdp-months-gap: 1.25rem;
+  --rdp-nav_button-height: 2.25rem;
+  --rdp-nav_button-width: 2.25rem;
+  font-family: var(--font-cinzel), serif;
+  color: var(--foreground);
+}
+@media (min-width: 640px) {
+  .rdp-daimasu .rdp-root {
+    --rdp-day-height: 2.5rem;
+    --rdp-day-width: 2.5rem;
+    --rdp-day_button-height: 2.5rem;
+    --rdp-day_button-width: 2.5rem;
+  }
+}
+.rdp-daimasu .rdp-root .rdp-months,
+.rdp-daimasu .rdp-root .rdp-month {
+  width: 100%;
+  max-width: 100%;
+}
+.rdp-daimasu .rdp-root .rdp-month_caption {
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  text-transform: uppercase;
+  font-size: 1rem;
+  padding: 0 0 0.75rem;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.rdp-daimasu .rdp-root .rdp-weekday {
+  color: rgba(212, 175, 55, 0.7);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+}
+.rdp-daimasu .rdp-root .rdp-day_button {
+  font-size: 0.9375rem;
+  letter-spacing: 0.02em;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.rdp-daimasu .rdp-root .rdp-day_button:hover:not([disabled]):not(.rdp-selected *) {
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.5);
+}
+.rdp-daimasu .rdp-root .rdp-today:not(.rdp-selected) .rdp-day_button {
+  color: var(--gold);
+  font-weight: 500;
+  position: relative;
+}
+.rdp-daimasu .rdp-root .rdp-today:not(.rdp-selected) .rdp-day_button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.rdp-daimasu .rdp-root .rdp-selected .rdp-day_button {
+  background: var(--gold);
+  color: var(--background);
+  font-weight: 600;
+  box-shadow: 0 0 0 2px var(--gold), 0 0 20px rgba(201, 168, 76, 0.35);
+  position: relative;
+}
+.rdp-daimasu .rdp-root .rdp-outside .rdp-day_button {
+  color: rgba(160, 152, 136, 0.55);
+}
+.rdp-daimasu .rdp-root .rdp-disabled .rdp-day_button {
+  color: rgba(160, 152, 136, 0.4);
+  cursor: not-allowed;
+}
+.rdp-daimasu .rdp-root .rdp-button_previous,
+.rdp-daimasu .rdp-root .rdp-button_next {
+  color: rgba(201, 168, 76, 0.7);
+}
+.rdp-daimasu .rdp-root .rdp-button_previous:hover:not([disabled]),
+.rdp-daimasu .rdp-root .rdp-button_next:hover:not([disabled]) {
+  color: var(--gold);
+  background: rgba(201, 168, 76, 0.08);
+}
+.rdp-daimasu .rdp-root .rdp-chevron {
+  fill: currentColor;
+}
+
+/* Hero H1 — CSS-only fade-in so LCP candidate is detected by Lighthouse */
+@keyframes hero-h1-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.hero-h1 {
+  animation: hero-h1-fade-in 0.7s ease-out 0.2s both;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Reduced-motion users see the poster frame instead of the looping reel. */
+  .hero-bg-video {
+    display: none;
+  }
+}
+
+/* ─── Admin font stack — SaaS-standard, override the public serif ─────
+   Inter for Latin (Linear / Stripe / GitHub / Vercel), Noto Sans JP for
+   Japanese. Body sits at weight 500 so the panel stops reading "thin"
+   in either light or dark mode. */
+
+[data-admin-theme] {
+  font-family:
+    var(--font-inter),
+    var(--font-noto-sans),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo",
+    sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";  /* Inter contextual alternates */
+  letter-spacing: -0.005em;
+}
+[data-admin-theme] body,
+[data-admin-theme] {
+  /* slightly heavier default so labels/values don't read as thin */
+  font-weight: 450;
+}
+/* The `.font-serif` on <body> from public site bleeds into /admin. Force
+   it back to sans inside the admin scope. */
+[data-admin-theme],
+[data-admin-theme] * {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+[data-admin-theme] .font-serif {
+  font-family: inherit;
+}
+
+/* Admin H1/H2 — override the public site's `font-[family-name:var(--font-noto-serif)]`
+   class. Specificity (0,1,1) beats the class-only specificity (0,1,0). */
+[data-admin-theme] h1,
+[data-admin-theme] h2 {
+  font-family:
+    var(--font-inter),
+    var(--font-noto-sans),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo",
+    sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+/* Tabular numbers everywhere in admin — money, counts, dates align cleanly. */
+[data-admin-theme] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Admin theme — operator UI is utility, not luxury ─────────────────
+   The public site (DAIMASU brand) uses warm gold + dark only. The admin
+   panel is for daily ops; needs both light (day) and dark (night) modes.
+
+   Scope: applied via `[data-admin-theme="light|dark"]` on the admin
+   layout's root div. Tokens override the public palette ONLY inside that
+   scope — public site is unaffected.
+
+   Light mode = primary recommendation (Linear / Stripe / Datadog style).
+   Dark mode = night-shift / dim-bar usability. */
+
+[data-admin-theme="light"] {
+  --background:      #fafafa;
+  --foreground:      #18181b;
+  --text-secondary:  #52525b;
+  --text-muted:      #71717a;
+  --surface:         #ffffff;
+  --card:            #ffffff;
+  --border:          #e4e4e7;
+  --border-gold:     rgba(160, 128, 32, 0.35);
+  /* Gold darkened for contrast on white. */
+  --gold:            #a08020;
+  --gold-light:      #c9a334;
+  --gold-soft:       #806818;
+  --gold-dark:       #5a4810;
+}
+
+[data-admin-theme="dark"] {
+  /* Slightly de-warmed dark for operator UI — less gold tint, more
+     neutral grey, so data tables read first and brand reads second. */
+  --background:      #0a0a0a;
+  --foreground:      #fafafa;
+  --text-secondary:  #d4d4d8;
+  --text-muted:      #a1a1aa;
+  --surface:         #18181b;
+  --card:            #1f1f23;
+  --border:          #2a2a2f;
+  --border-gold:     rgba(212, 175, 55, 0.30);
+}
+
+/* Status colors flip per theme so red/amber/green stay readable on both
+   light cards and dark surfaces. Used by Tailwind utility overrides
+   below + by the .admin-status-* classes. */
+[data-admin-theme="light"] {
+  --status-warn:     #b45309;  /* amber-700  */
+  --status-error:    #dc2626;  /* red-600    */
+  --status-success:  #15803d;  /* green-700  */
+  --status-info:     #1d4ed8;  /* blue-700   */
+  --status-pending:  #a16207;  /* yellow-700 */
+}
+[data-admin-theme="dark"] {
+  --status-warn:     #fbbf24;  /* amber-400 */
+  --status-error:    #f87171;  /* red-400   */
+  --status-success:  #4ade80;  /* green-400 */
+  --status-info:     #60a5fa;  /* blue-400  */
+  --status-pending:  #facc15;  /* yellow-400 */
+}
+
+/* Tailwind status utilities used in admin pages, retargeted per theme.
+   Less invasive than rewriting every file's text-red-400 to a semantic
+   class. Specificity is `[data-admin-theme] .text-red-400`, beats raw
+   utility from Tailwind. */
+[data-admin-theme] .text-red-400        { color: var(--status-error)   !important; }
+[data-admin-theme] .text-amber-400      { color: var(--status-warn)    !important; }
+[data-admin-theme] .text-green-400      { color: var(--status-success) !important; }
+[data-admin-theme] .text-yellow-400     { color: var(--status-pending) !important; }
+[data-admin-theme] .text-red-400\/90    { color: color-mix(in srgb, var(--status-error)   90%, transparent) !important; }
+[data-admin-theme] .text-red-400\/80    { color: color-mix(in srgb, var(--status-error)   80%, transparent) !important; }
+
+/* ─── Admin typography tokens ────────────────────────────────────────────
+   Jobs-lens audit (2026-04-29): admin pages had 56× text-[10px] and zero
+   text-base. Floor moved to 13px; only timestamps/IDs may go to 11px.
+   Use these classes instead of arbitrary text-[Npx] in /admin/*. */
+
+.admin-display    { font-size: 18px; line-height: 1.3;  letter-spacing: 0.01em; }
+.admin-body       { font-size: 14px; line-height: 1.55; color: var(--foreground); }
+.admin-body-sm    { font-size: 13px; line-height: 1.5;  color: var(--foreground); }
+.admin-caption    { font-size: 12px; line-height: 1.4;  color: var(--text-secondary); }
+.admin-meta       { font-size: 11px; line-height: 1.3;  color: var(--text-muted); letter-spacing: 0.02em; }
+.admin-num        { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.admin-section-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  opacity: 0.85;
+}
+.admin-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+/* ─── Admin DayPicker — iPad-friendly large tap targets ───────────────
+   Apple HIG min 44pt; we go 56px for comfort on a counter-mounted iPad
+   where the operator may be standing back from the screen. */
+.rdp-daimasu-admin .rdp-root {
+  --rdp-accent-color: var(--gold);
+  --rdp-accent-background-color: color-mix(in srgb, var(--gold) 18%, transparent);
+  --rdp-today-color: var(--gold);
+  --rdp-background-color: transparent;
+  --rdp-day-height: 3.5rem;          /* 56px tap target */
+  --rdp-day-width: 3.5rem;
+  --rdp-day_button-height: 3.5rem;
+  --rdp-day_button-width: 3.5rem;
+  --rdp-day_button-border-radius: 0;
+  --rdp-selected-border: 2px solid var(--gold);
+  --rdp-weekday-text-transform: uppercase;
+  --rdp-months-gap: 1.25rem;
+  --rdp-nav_button-height: 2.75rem;
+  --rdp-nav_button-width: 2.75rem;
+  color: var(--foreground);
+  font-family: inherit;
+}
+.rdp-daimasu-admin .rdp-root .rdp-month_caption {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--foreground);
+  font-size: 1.125rem;
+  padding: 0.25rem 0 1rem;
+  text-align: center;
+}
+.rdp-daimasu-admin .rdp-root .rdp-weekday {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  padding: 0.5rem 0;
+}
+.rdp-daimasu-admin .rdp-root .rdp-day_button {
+  font-size: 1.125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.rdp-daimasu-admin .rdp-root .rdp-day_button:hover:not([disabled]):not(.rdp-selected *) {
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+  color: var(--gold);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 50%, transparent);
+}
+.rdp-daimasu-admin .rdp-root .rdp-today:not(.rdp-selected) .rdp-day_button {
+  color: var(--gold);
+  font-weight: 700;
+  position: relative;
+}
+.rdp-daimasu-admin .rdp-root .rdp-today:not(.rdp-selected) .rdp-day_button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.4rem;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.rdp-daimasu-admin .rdp-root .rdp-selected .rdp-day_button {
+  background: var(--gold);
+  color: var(--background);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+.rdp-daimasu-admin .rdp-root .rdp-outside .rdp-day_button {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+.rdp-daimasu-admin .rdp-root .rdp-disabled .rdp-day_button {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.rdp-daimasu-admin .rdp-root .rdp-button_previous,
+.rdp-daimasu-admin .rdp-root .rdp-button_next {
+  color: var(--text-secondary);
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.rdp-daimasu-admin .rdp-root .rdp-button_previous:hover:not([disabled]),
+.rdp-daimasu-admin .rdp-root .rdp-button_next:hover:not([disabled]) {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, var(--surface));
+}
+.rdp-daimasu-admin .rdp-root .rdp-chevron {
+  fill: currentColor;
+}

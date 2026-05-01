@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# /admin is owner-only and must not be indexed.
+Disallow: /admin
+Disallow: /admin/
+
+Host: https://reserve.daimasu.com.ph
+Sitemap: https://reserve.daimasu.com.ph/sitemap.xml
