@@ -14,7 +14,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { adminClient } from "@/lib/db/clients";
 import { stripe } from "@/lib/stripe/client";
-import { isDepositRequired } from "@/lib/env";
 import {
   verifyCancelToken,
   tokenMatchesHash,
@@ -120,12 +119,27 @@ export async function POST(req: NextRequest) {
 
   const startsAt = new Date(reservation.service_starts_at);
   const hours = hoursUntilService(startsAt);
-  const depositFlow = isDepositRequired();
-  // Deposit-free flow: there's nothing to refund, so the tier is purely an
-  // audit label. Force "full" so cancellations don't show "no refund" copy
-  // that would confuse a guest who never paid in the first place.
-  const tier = depositFlow ? refundTier(hours, settings) : "full";
-  const refundCentavos = depositFlow
+
+  // Codex review C2 fix: refund eligibility is a property of the row, not a
+  // property of the global flag. Look up the deposit payment first; if this
+  // row was booked under the deposit flow it'll have a Stripe payment_intent
+  // ref, and the policy refund tier applies. If it was booked under the
+  // deposit-free flow there's no payment row at all → refund=0 and tier
+  // collapses to "full" (the customer never paid, so there's no penalty
+  // either). This keeps refunds working correctly even after the operator
+  // toggles RESERVATIONS_DEPOSIT_REQUIRED.
+  const { data: depositPayment } = await sb
+    .from("payments")
+    .select("provider_ref")
+    .eq("reservation_id", reservation.id)
+    .eq("kind", "deposit_capture")
+    .limit(1)
+    .maybeSingle<{ provider_ref: string | null }>();
+  const hasStripeDeposit = Boolean(
+    reservation.deposit_centavos > 0 && depositPayment?.provider_ref
+  );
+  const tier = hasStripeDeposit ? refundTier(hours, settings) : "full";
+  const refundCentavos = hasStripeDeposit
     ? refundAmountCentavos(tier, reservation.deposit_centavos)
     : 0;
 
@@ -147,13 +161,6 @@ export async function POST(req: NextRequest) {
   // execute: issue Stripe refund (if any) + flip reservation status atomically-ish
 
   // 1. Stripe refund — idempotent. Reuse the deposit's payment_intent.
-  const { data: depositPayment } = await sb
-    .from("payments")
-    .select("provider_ref")
-    .eq("reservation_id", reservation.id)
-    .eq("kind", "deposit_capture")
-    .limit(1)
-    .maybeSingle<{ provider_ref: string | null }>();
 
   // P1-3 fix: minute-bucketed idempotency key. Stripe's idempotency window is
   // 24h; a transient failure with a static key would replay the failure forever.

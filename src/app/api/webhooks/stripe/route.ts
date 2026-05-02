@@ -25,25 +25,21 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  // Hard-disable when the deposit flow is off. Any inbound Stripe call
-  // is either a stale webhook from a prior deployment or hostile noise
-  // — in both cases we want the loud 410 rather than silently passing
-  // signature verification on a key the operator no longer manages.
-  if (!isDepositRequired()) {
-    return NextResponse.json(
-      { ok: false, reason: "stripe_disabled" },
-      { status: 410 }
-    );
-  }
-
+  // Codex review C1 fix: do NOT 410 unconditionally when the deposit flow
+  // is disabled. A pending_payment row created before the flag was flipped
+  // could still receive a legitimate checkout.session.completed event, and
+  // dropping it would strand a paid-for booking in pending_payment forever.
+  // Instead: if the secret is configured, verify and process normally; if
+  // there's no row to flip, the existing handlers are already no-ops.
+  // If the secret is missing, ack 200 so Stripe stops retrying noise.
   const env = serverEnv();
-  // Fail loud rather than passing undefined into constructEvent — same
-  // rationale as the stripe() singleton: if the deposit flow is on, the
-  // secret must be present.
   if (!env.STRIPE_WEBHOOK_SECRET) {
+    // Either we're fully off Stripe (no secret rotated in) or this is a
+    // misconfiguration. Either way, signature verification is impossible;
+    // ack to stop retries rather than 5xx-looping Stripe forever.
     return NextResponse.json(
-      { ok: false, reason: "stripe_webhook_secret_missing" },
-      { status: 500 }
+      { ok: true, reason: isDepositRequired() ? "secret_missing" : "stripe_disabled" },
+      { status: 200 }
     );
   }
   const sig = req.headers.get("stripe-signature");

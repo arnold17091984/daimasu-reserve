@@ -101,12 +101,23 @@ export async function POST(req: NextRequest) {
 
   // 3. price snapshot — menu-only totals on the reservation row (SVC + VAT
   //    are layered on at settlement / OR issuance, not here).
+  //
+  //    Codex review H3 fix: in the deposit-free flow the row must NOT carry
+  //    a positive deposit_centavos / deposit_pct, otherwise the admin UI and
+  //    the cancel route both think there's a Stripe payment to refund. Set
+  //    deposit=0, balance=total, deposit_pct=0 so the row truthfully reflects
+  //    "nothing has been charged, balance is the full course total".
+  const depositRequired = isDepositRequired();
   const startsAt = serviceStartsAt(input.service_date, input.seating, settings);
-  const { deposit, balance } = priceBreakdown(
+  const breakdown = priceBreakdown(
     settings.course_price_centavos,
     input.party_size,
     settings.deposit_pct
   );
+  const totalCentavos = settings.course_price_centavos * input.party_size;
+  const deposit = depositRequired ? breakdown.deposit : 0;
+  const balance = depositRequired ? breakdown.balance : totalCentavos;
+  const depositPct = depositRequired ? settings.deposit_pct : 0;
 
   // pre-issue an id so we can use it in the cancel-token + Stripe metadata
   const reservationId = crypto.randomUUID();
@@ -127,7 +138,6 @@ export async function POST(req: NextRequest) {
   //    The status defaults to 'pending_payment' for the deposit flow and
   //    is flipped to 'confirmed' up-front for the deposit-free flow so
   //    the row never enters the pending limbo / reaper sweep.
-  const depositRequired = isDepositRequired();
   const initialStatus = depositRequired ? "pending_payment" : "confirmed";
   const { data: bookedRow, error: bookErr } = await sb
     .rpc("book_reservation_atomic", {
@@ -142,7 +152,7 @@ export async function POST(req: NextRequest) {
       p_guest_lang: input.guest_lang,
       p_notes: input.notes ?? null,
       p_course_price_centavos: settings.course_price_centavos,
-      p_deposit_pct: settings.deposit_pct,
+      p_deposit_pct: depositPct,
       p_deposit_centavos: deposit,
       p_balance_centavos: balance,
       p_cancel_token_hash: tokenBundle.hash,
