@@ -49,7 +49,6 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
 
   const depositFlow = isDepositRequired();
   const isPending = reservation.status === "pending_payment";
-  const isConfirmed = reservation.status === "confirmed";
 
   return (
     <main className="min-h-screen bg-background">
