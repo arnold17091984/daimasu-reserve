@@ -83,35 +83,77 @@ export async function POST(req: NextRequest) {
         hoursOut: hours,
       });
       const reminderKind = win === "long" ? "reminder_long" : "reminder_short";
-      await sendEmail({
-        to: r.guest_email,
-        subject,
-        html,
-        idempotencyKey: `email:reminder:${win}:${r.id}`,
-        log: { reservation_id: r.id, kind: reminderKind },
-      });
 
-      // Best-effort WhatsApp.
-      if (settings.whatsapp_from_number && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN) {
-        const body =
-          r.guest_lang === "ja"
-            ? `[DAIMASU] ご来店${hours}時間前のリマインドです。 / ${new Date(r.service_starts_at).toLocaleString("ja-JP", { timeZone: "Asia/Manila", dateStyle: "short", timeStyle: "short" })}`
-            : `[DAIMASU] Reminder — ${hours}h to your reservation at ${new Date(r.service_starts_at).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "short", timeStyle: "short" })}`;
-        await sendWhatsApp({
-          toPhoneE164: r.guest_phone.replace(/\s/g, ""),
-          body,
-          fromWhatsApp: settings.whatsapp_from_number,
+      // Each channel runs in its own try so a throw in one cannot undo
+      // the other's success (Codex review 2026-05-02 fix). Email skipped
+      // (RESEND_API_KEY absent) is treated as "not delivered" so the
+      // next cron run reprocesses once a key is set; WhatsApp absent is
+      // similarly inert.
+      let emailDelivered = false;
+      let lastEmailError: string | null = null;
+      try {
+        const emailRes = await sendEmail({
+          to: r.guest_email,
+          subject,
+          html,
+          idempotencyKey: `email:reminder:${win}:${r.id}`,
           log: { reservation_id: r.id, kind: reminderKind },
         });
+        emailDelivered = emailRes.ok;
+        if (!emailRes.ok) lastEmailError = emailRes.error;
+      } catch (err) {
+        lastEmailError = err instanceof Error ? err.message : "send_failed";
       }
 
-      // Mark sent (idempotent — same column, only if still null)
-      await sb
-        .from("reservations")
-        .update({ [sentColumn]: new Date().toISOString() })
-        .eq("id", r.id);
+      let whatsappDelivered = false;
+      let lastWaError: string | null = null;
+      if (settings.whatsapp_from_number && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN) {
+        try {
+          const body =
+            r.guest_lang === "ja"
+              ? `[DAIMASU] ご来店${hours}時間前のリマインドです。 / ${new Date(r.service_starts_at).toLocaleString("ja-JP", { timeZone: "Asia/Manila", dateStyle: "short", timeStyle: "short" })}`
+              : `[DAIMASU] Reminder — ${hours}h to your reservation at ${new Date(r.service_starts_at).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "short", timeStyle: "short" })}`;
+          const wa = await sendWhatsApp({
+            toPhoneE164: r.guest_phone.replace(/\s/g, ""),
+            body,
+            fromWhatsApp: settings.whatsapp_from_number,
+            log: { reservation_id: r.id, kind: reminderKind },
+          });
+          whatsappDelivered = wa.ok;
+          if (!wa.ok) lastWaError = wa.reason;
+        } catch (err) {
+          lastWaError = err instanceof Error ? err.message : "send_failed";
+        }
+      }
 
-      results.push({ id: r.id, ok: true });
+      // Mark sent only when AT LEAST one channel actually delivered.
+      // Email-only deployments without WhatsApp work; WhatsApp-only
+      // deployments without Resend work; neither configured leaves the
+      // row open for retry. Email success guarantees mark even if a
+      // subsequent WhatsApp throw happened (the early try/catch above
+      // already absorbed that throw and we never lose email-success state).
+      if (emailDelivered || whatsappDelivered) {
+        const {error: updateErr} = await sb
+          .from("reservations")
+          .update({ [sentColumn]: new Date().toISOString() })
+          .eq("id", r.id);
+        if (updateErr) {
+          console.error("[cron/reminders] sent_at update failed", {
+            id: r.id, error: updateErr.message,
+          });
+        }
+        results.push({ id: r.id, ok: true });
+      } else {
+        results.push({
+          id: r.id,
+          ok: false,
+          reason: lastEmailError
+            ? `email_failed:${lastEmailError}`
+            : lastWaError
+              ? `whatsapp_failed:${lastWaError}`
+              : "no_channel_configured",
+        });
+      }
     } catch (err) {
       results.push({
         id: r.id,

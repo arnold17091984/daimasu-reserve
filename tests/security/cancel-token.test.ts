@@ -120,7 +120,7 @@ describe("schemas — zod validators reject obviously bad input", () => {
   it("honeypot tripped → still parses (router checks the field)", async () => {
     const { createReservationSchema } = await import("@/lib/domain/schemas");
     const base = {
-      service_date: "2026-06-01",
+      service_date: "2099-12-31",
       seating: "s1" as const,
       party_size: 2,
       guest_name: "T",
@@ -128,9 +128,13 @@ describe("schemas — zod validators reject obviously bad input", () => {
       guest_phone: "+639170000000",
       website: "http://spam.example",
     };
-    // Honeypot field requires empty string when present; non-empty fails validation.
+    // E2E test 2026-05-02 fix (M1): the schema now ACCEPTS non-empty
+    // website so the route handler can return the silent-200 bot tarpit.
+    // Previously it rejected with 400, tipping bots off that the field
+    // was monitored. The test name ("still parses (router checks the
+    // field)") matches the corrected behaviour now.
     const r = createReservationSchema.safeParse(base);
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
   });
 
   it("strips CR/LF/TAB from name, phone, notes (header-injection defense)", async () => {

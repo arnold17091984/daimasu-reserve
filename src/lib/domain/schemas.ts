@@ -11,6 +11,28 @@ const dateString = z
   .refine((s) => !Number.isNaN(new Date(`${s}T00:00:00Z`).getTime()), "Invalid date");
 
 /**
+ * Date string that must be today or in the future (Asia/Manila wall-clock).
+ *
+ * E2E test 2026-05-02 found that `service_date` accepted `2020-01-01` and the
+ * row was inserted as `confirmed`. The booking calendar UI disabled past dates
+ * but the server schema didn't enforce, so any direct API caller could create
+ * arbitrarily old reservations.
+ *
+ * Implementation: build "today" by formatting Date.now() in Asia/Manila. We
+ * accept anything >= today's wall-clock date so a guest in PHT timezone can
+ * still book the same evening.
+ */
+function todayInManila(): string {
+  // sv-SE locale gives YYYY-MM-DD even via Intl.
+  return new Date().toLocaleDateString("sv-SE", {timeZone: "Asia/Manila"});
+}
+
+const futureDateString = dateString.refine(
+  (s) => s >= todayInManila(),
+  "Date must be today or in the future"
+);
+
+/**
  * Strip CR/LF/TAB before any other validation runs (audit fix C-1: prevents
  * SMTP/Telegram header injection downstream). Multiple whitespace runs collapse
  * to a single space so "Hello\r\nBcc:" doesn't yield "Hello  Bcc:".
@@ -33,7 +55,8 @@ const email = z.preprocess(
 );
 
 export const createReservationSchema = z.object({
-  service_date: dateString,
+  // Public bookings must be today or future — see futureDateString rationale.
+  service_date: futureDateString,
   seating: z.enum(["s1", "s2"]),
   party_size: z.number().int().min(1).max(8),
   guest_name: z.preprocess(
@@ -50,7 +73,13 @@ export const createReservationSchema = z.object({
     z.string().max(280).nullable().optional()
   ),
   // Honeypot — the booking UI ships an always-hidden field. Bots fill it.
-  website: z.string().max(0).optional().or(z.literal("")),
+  // E2E test 2026-05-02: previously this was `z.string().max(0)`, which
+  // returned 400 "validation: too_big" when bots filled the field — telling
+  // them they were caught. The route handler can't reach its silent-200
+  // branch if the schema rejects first. Accept any string; the handler's
+  // `if (input.website && input.website.length > 0)` branch returns the
+  // bot-tarpit fake-200.
+  website: z.string().max(2048).optional(),
 });
 
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;

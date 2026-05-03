@@ -33,6 +33,7 @@ import {
 } from "@/lib/domain/reservation";
 import { serverEnv, isDepositRequired } from "@/lib/env";
 import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
+import { auditInsert } from "@/lib/db/audit";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -177,13 +178,31 @@ export async function POST(req: NextRequest) {
 
   // 5a. Deposit-free path: notify and return immediately, skip Stripe.
   if (!depositRequired) {
+    // E2E test 2026-05-02 fix (H1): pass our already-issued token through
+    // so dispatch doesn't rotate the hash out from under us. The response
+    // below now returns a token that's actually valid against the DB.
     try {
-      await sendConfirmationDispatch(bookedRow, sb);
+      await sendConfirmationDispatch(bookedRow, sb, {preIssuedToken: tokenBundle});
     } catch (err) {
       // Notification failures must not roll back the booking — the row is
       // already confirmed and the seat is allocated. Log only.
       console.error("[reservations] sendConfirmationDispatch failed", err);
     }
+    // E2E fix (H2): explicitly audit the deposit-free creation. The legacy
+    // Stripe flow logged via the webhook's reservation.confirm action; with
+    // no webhook in this path we'd have no audit trail at all otherwise.
+    await auditInsert(sb, {
+      actor: "system",
+      reservation_id: reservationId,
+      action: "reservation.confirm.deposit_free",
+      after_data: {
+        seating: input.seating,
+        service_date: input.service_date,
+        party_size: input.party_size,
+        seat_numbers: bookedRow.seat_numbers,
+      },
+      reason: "deposit-free flow — auto-confirmed at booking time",
+    });
     return NextResponse.json(
       {
         ok: true,

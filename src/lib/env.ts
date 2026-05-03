@@ -41,8 +41,23 @@ const schema = z.object({
     .default("true")
     .transform((v) => v === "true"),
 
-  // Resend (transactional email)
-  RESEND_API_KEY: z.string().min(10),
+  // Resend (transactional email) — OPTIONAL.
+  //
+  // E2E test 2026-05-02 found production was deployed with the placeholder
+  // "re_DUMMY..." key, and 0 emails ever succeeded. Now we accept either:
+  //  (a) a valid Resend key (re_ prefix, ≥30 chars, no DUMMY/PLACEHOLDER/TODO)
+  //  (b) absent / empty — sendEmail() short-circuits and logs "skipped"
+  //      so deployment still works without Resend, with Telegram as the
+  //      operator-facing channel and a clear notification_log paper trail.
+  // What we REFUSE is a malformed-but-present key, because that hides the
+  // failure mode that caused the original incident.
+  RESEND_API_KEY: z
+    .string()
+    .optional()
+    .refine(
+      (k) => !k || (k.startsWith("re_") && k.length >= 30 && !/DUMMY|PLACEHOLDER|TODO/i.test(k)),
+      "RESEND_API_KEY is set but looks like a placeholder. Either remove it (email will be skipped) or set a real Resend key."
+    ),
 
   // Twilio (WhatsApp Business reminders)
   TWILIO_ACCOUNT_SID: z.string().optional(),
