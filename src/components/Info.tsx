@@ -18,7 +18,13 @@ import {
 } from "lucide-react";
 import { useLang } from "@/lib/language";
 import { COURSE_PRICE, FAQ_ITEMS, CONTACT, RESTAURANT_INFO } from "@/lib/constants";
+import { publicEnv } from "@/lib/env";
 import ReservationForm from "@/components/ReservationForm";
+
+// Mirror of RESERVATIONS_DEPOSIT_REQUIRED for the contact-card cancellation
+// copy. Same flag the booking form uses; UI hint only — actual cancel API
+// is server-driven.
+const DEPOSIT_REQUIRED_UI = publicEnv.depositRequired;
 
 type FaqItem = (typeof FAQ_ITEMS)[number];
 
@@ -321,8 +327,12 @@ export default function Info() {
                 />
                 <span className="tracking-wide">
                   {t(
-                    RESTAURANT_INFO.cancellation.ja,
-                    RESTAURANT_INFO.cancellation.en
+                    DEPOSIT_REQUIRED_UI
+                      ? RESTAURANT_INFO.cancellation.ja
+                      : RESTAURANT_INFO.cancellationDepositFree.ja,
+                    DEPOSIT_REQUIRED_UI
+                      ? RESTAURANT_INFO.cancellation.en
+                      : RESTAURANT_INFO.cancellationDepositFree.en
                   )}
                 </span>
               </div>

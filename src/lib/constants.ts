@@ -300,8 +300,12 @@ export const CONTACT = {
     ja: "11:00〜24:00 (毎日営業)",
     en: "11:00–24:00 · open daily",
   },
+  // Use www.google.com (not maps.google.com) — the site CSP only whitelists
+  // www.google.com under frame-src. The maps subdomain was blocked, so the
+  // iframe rendered as the broken-image placeholder on the contact card.
+  // This URL form is supported by Google Maps for embedding without an API key.
   mapEmbedUrl:
-    "https://maps.google.com/maps?q=14.5363194,121.0201423&z=17&hl=en&output=embed",
+    "https://www.google.com/maps?q=14.5363194,121.0201423&z=17&hl=en&output=embed",
   mapLinkUrl:
     "https://www.google.com/maps/place/DAIMASU+JAPANESE+RESTAURANT/@14.5363194,121.0201423,17z",
 };
@@ -329,6 +333,14 @@ export const RESTAURANT_INFO = {
   cancellation: {
     en: "Full refund up to 48 hours before service. 50% refund 24–48 hours before. No refund within 24 hours; no-shows are charged in full.",
     ja: "ご来店48時間前までのキャンセルは全額返金。24〜48時間前のキャンセルは50%返金。24時間を切ってからのキャンセル・当日ご不来場は全額申し受けます。",
+  },
+  // Used when RESERVATIONS_DEPOSIT_REQUIRED=false. The deposit-flow copy
+  // above mentions refunds and no-show charges that don't apply when
+  // there's no payment to refund — would mislead guests in the deposit-
+  // free deployment.
+  cancellationDepositFree: {
+    en: "Plans change — cancel any time via the link in your confirmation email. No deposit, no cancellation fee.",
+    ja: "ご都合が変わった場合、確認メール内のキャンセルリンクから 24 時間 365 日承ります。デポジット・キャンセル料はございません。",
   },
   mapEmbedUrl: CONTACT.mapEmbedUrl,
   mapPinHref: CONTACT.mapLinkUrl,
