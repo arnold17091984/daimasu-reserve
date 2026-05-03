@@ -132,12 +132,16 @@ body {
     0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
-/* Hero ornament — 180px gold line with two diamond motifs set 76px from each edge. */
+/* Hero ornament — 180px gold line with two diamond motifs set 76px from each edge.
+   margin-inline: auto so the block-level element centres in `text-center`
+   parents (Hero) without needing extra utility classes. Flex parents
+   (Header mobile menu, etc.) ignore margin-auto when justify-center is set. */
 .ornate-divider {
   position: relative;
   display: block;
   width: 180px;
   height: 1px;
+  margin-inline: auto;
   opacity: 0.85;
   background: linear-gradient(90deg, transparent, var(--gold), transparent);
 }

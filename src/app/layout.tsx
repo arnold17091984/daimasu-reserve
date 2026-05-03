@@ -194,6 +194,16 @@ export default function RootLayout({
     <html lang="en" className={`${cinzel.variable} ${notoSerifJP.variable} ${notoSansJP.variable} ${inter.variable} ${cormorant.variable} ${shipporiMincho.variable}`}>
       <head>
         <meta name="theme-color" content="#0a0a0a" />
+        {/*
+          The site ships its own JA/EN toggle, so Chrome's auto-translate
+          prompt overlay (triggered when html lang="en" doesn't match the
+          rendered JA content for JA-locale browsers) is unwanted UX noise
+          that overlaps the header CTA. notranslate hides the prompt without
+          disabling manual translation from the browser menu. The actual
+          html lang is rotated client-side via document.documentElement.lang
+          in src/lib/language.tsx once the user's stored preference loads.
+        */}
+        <meta name="google" content="notranslate" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
