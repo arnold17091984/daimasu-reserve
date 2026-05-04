@@ -32,9 +32,14 @@ export default async function AdminLayout({
   return (
     <div data-admin-theme={theme} className="min-h-screen bg-background text-foreground">
       {admin ? (
-        <div className="lg:grid lg:min-h-screen lg:grid-cols-[220px_1fr] print:!block">
-          {/* Mobile top bar */}
-          <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden print:hidden">
+        // 2026-05-04 tablet UX fix: switch the sidebar/horizontal-nav
+        // boundary from lg (1024px) to md (768px) so iPad portrait
+        // (810/834/1024px) gets the proper desktop dashboard layout
+        // instead of falling back to the phone horizontal scroller.
+        // Sidebar shrinks to 188px at md and expands to 220px at lg+.
+        <div className="md:grid md:min-h-screen md:grid-cols-[188px_1fr] lg:grid-cols-[220px_1fr] print:!block">
+          {/* Mobile top bar (phone only — <768px) */}
+          <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:hidden print:hidden">
             <Link href="/admin" aria-label={ti(lang, "DAIMASU 管理画面", "DAIMASU Admin")} className="block">
               {/* eslint-disable-next-line @next/next/no-img-element -- static admin asset, no Next/Image overhead needed */}
               <img
@@ -53,8 +58,10 @@ export default async function AdminLayout({
             </div>
           </header>
 
-          {/* Mobile horizontal nav scroller — primary action first */}
-          <nav className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-2 py-2 text-[13px] lg:hidden print:hidden">
+          {/* Phone horizontal nav scroller (<768px). Tablet+ uses the
+              vertical sidebar below. py-3 for thumb-friendly tap area
+              (was py-2 ~32px high — under the iOS HIG 44pt minimum). */}
+          <nav className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-2 py-3 text-[13px] md:hidden print:hidden">
             <MobileNavLink href="/admin/reservations/new" icon={<Plus size={14} />} primary>
               {ti(lang, "新規予約", "New booking")}
             </MobileNavLink>
@@ -84,8 +91,8 @@ export default async function AdminLayout({
             </MobileNavLink>
           </nav>
 
-          {/* Desktop sidebar */}
-          <aside className="hidden flex-col border-r border-border bg-surface p-5 lg:flex print:hidden">
+          {/* Sidebar — visible from md+ (iPad portrait gets it too now). */}
+          <aside className="hidden flex-col border-r border-border bg-surface p-4 md:flex lg:p-5 print:hidden">
             <Link
               href="/admin"
               aria-label={ti(lang, "DAIMASU 管理画面", "DAIMASU Admin")}
@@ -189,7 +196,8 @@ function NavLink({
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 px-2.5 py-2.5 text-[14px] text-text-secondary transition-colors hover:bg-card hover:text-foreground"
+      // 2026-05-04 tablet UX fix: py-3 ≈ 44px tap height (iOS HIG min).
+      className="flex items-center gap-3 px-2.5 py-3 text-[14px] text-text-secondary transition-colors hover:bg-card hover:text-foreground"
     >
       <span className="text-gold">{icon}</span>
       <span>{children}</span>
@@ -212,7 +220,8 @@ function MobileNavLink({
     return (
       <Link
         href={href}
-        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-gold bg-gold px-3.5 py-2 font-semibold text-background shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+        // 2026-05-04 tablet UX fix: py-3 ≈ 44px tap height (iOS HIG min).
+        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-gold bg-gold px-3.5 py-3 font-semibold text-background shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
       >
         <span aria-hidden="true">{icon}</span>
         <span>{children}</span>
@@ -222,7 +231,8 @@ function MobileNavLink({
   return (
     <Link
       href={href}
-      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-border bg-background px-3 py-2 text-text-secondary hover:border-gold/50 hover:text-foreground"
+      // 2026-05-04 tablet UX fix: py-3 ≈ 44px tap height (iOS HIG min).
+      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-border bg-background px-3 py-3 text-text-secondary hover:border-gold/50 hover:text-foreground"
     >
       <span className="text-gold">{icon}</span>
       <span>{children}</span>

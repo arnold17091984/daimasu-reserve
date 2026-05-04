@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import type { Reservation, PaymentMethod } from "@/lib/db/types";
 import { formatPHP, receiptBreakdown } from "@/lib/domain/reservation";
@@ -25,6 +26,7 @@ export function SettleForm({
   reservation: Reservation;
   lang: AdminLang;
 }) {
+  const router = useRouter();
   const ti = (ja: string, en: string) => (lang === "ja" ? ja : en);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   // On-site due = grand_total (menu+SVC+VAT) − deposit already paid.
@@ -65,7 +67,8 @@ export function SettleForm({
         return;
       }
       setStatus("ok");
-      window.location.reload();
+      // Perf 2026-05-04: router.refresh() instead of full reload.
+      router.refresh();
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Network");

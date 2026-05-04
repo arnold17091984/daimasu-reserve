@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import type { Reservation } from "@/lib/db/types";
 import type { AdminLang } from "@/lib/auth/admin-lang";
@@ -13,6 +14,7 @@ export function NoShowButton({
   reservation: Reservation;
   lang: AdminLang;
 }) {
+  const router = useRouter();
   const ti = (ja: string, en: string) => (lang === "ja" ? ja : en);
   const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<"idle" | "pending" | "error">("idle");
@@ -32,7 +34,8 @@ export function NoShowButton({
         setErrorMsg(data.error ?? "Failed");
         return;
       }
-      window.location.reload();
+      // Perf 2026-05-04: router.refresh() instead of full reload.
+      router.refresh();
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Network");
