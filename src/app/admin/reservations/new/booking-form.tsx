@@ -149,6 +149,18 @@ export function ManualBookingForm({
   const fullPhone = `${countryCode} ${trimmedPhoneLocal}`.trim();
   const nameMissing = trimmedName.length === 0;
   const phoneMissing = phoneDigits.length === 0;
+  // Codex review 2026-05-05 P2: server schema (lib/domain/schemas.ts)
+  // caps guest_phone at 30 chars after the dial code is prefixed. Cap
+  // the local-number maxLength relative to the chosen country code so
+  // the local-only `<input maxLength=30>` cannot produce a 34-char
+  // `fullPhone` that the server rejects after the operator already
+  // confirmed the review screen.
+  const PHONE_MAX = 30;
+  const phoneLocalMaxLength = Math.max(
+    1,
+    PHONE_MAX - (countryCode.length + 1), // +1 for the joining space
+  );
+  const phoneTooLong = fullPhone.length > PHONE_MAX;
   const partySizeMissing = partySize < 1;
 
   // Show validation only after the first submit attempt (avoids
@@ -163,6 +175,7 @@ export function ManualBookingForm({
     if (
       nameMissing ||
       phoneMissing ||
+      phoneTooLong ||
       partySizeMissing ||
       dateClosed ||
       partySize > seatRemaining ||
@@ -602,7 +615,7 @@ export function ManualBookingForm({
                     ? "9XX XXX XXXX"
                     : ti("番号を入力", "Phone number")
                 }
-                maxLength={30}
+                maxLength={phoneLocalMaxLength}
                 required
                 className={inputCls}
               />
@@ -610,6 +623,14 @@ export function ManualBookingForm({
             {showValidation && phoneMissing && (
               <span className="text-[12px] font-medium text-red-400">
                 {ti("電話番号が入力されていません", "Phone number is required")}
+              </span>
+            )}
+            {showValidation && !phoneMissing && phoneTooLong && (
+              <span className="text-[12px] font-medium text-red-400">
+                {ti(
+                  `電話番号は国番号を含めて${PHONE_MAX}文字以内にしてください`,
+                  `Phone number must be ${PHONE_MAX} characters or fewer including the country code`,
+                )}
               </span>
             )}
           </Field>
