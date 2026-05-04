@@ -7,7 +7,7 @@
  * no-show / kept / lost. Inspired by Airレジ's 日別売上 view.
  */
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, TrendingUp, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
 import { adminClient } from "@/lib/db/clients";
@@ -41,21 +41,11 @@ export default async function RevenuePage({
   await requireAdminOrRedirect();
   const sb = adminClient();
 
-  // Deposit-free flow: revenue views (revenue_daily / revenue_monthly) are
-  // built from `payments` rows that no longer exist. Render a covers-only
-  // summary instead so the page isn't a wall of zeros and ₱0.
-  if (!isDepositRequired()) {
-    return (
-      <ReservationsOnlyView
-        lang={lang}
-        sb={sb}
-        targetY={targetY}
-        targetM={targetM}
-        monthStart={monthStart}
-        monthEnd={monthEnd}
-      />
-    );
-  }
+  // Deposit-free mode hides "kept (no-show deposit)" and "lost (no-show
+  // balance)" stats — both are always ₱0 when no deposit is collected.
+  // The settle flow still inserts payments rows (kind=on_site_settlement),
+  // so revenue_daily / revenue_monthly aggregate the actual on-site sales.
+  const depositMode = isDepositRequired();
 
   let monthly: RevenueMonthly | null = null;
   let daily: RevenueDaily[] = [];
@@ -159,8 +149,8 @@ export default async function RevenuePage({
           value={formatPHP(totalGross, lang)}
           sub={ti(
             lang,
-            "確定済み予約の総額 (no-show含む)",
-            "Confirmed bookings (incl. no-show)"
+            "確定/完了予約のメニュー総額",
+            "Confirmed + completed menu total"
           )}
         />
         <Stat
@@ -179,8 +169,15 @@ export default async function RevenuePage({
         />
       </div>
 
-      {/* Issue stats — second row */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Issue stats — deposit-free mode hides the two no-show money cards
+          (always ₱0 with no deposit collected). */}
+      <div
+        className={
+          depositMode
+            ? "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
+            : "mb-6 grid grid-cols-2 gap-3"
+        }
+      >
         <Stat
           label={ti(lang, "キャンセル率", "Cancel rate")}
           value={`${cancelRatePct}%`}
@@ -201,25 +198,29 @@ export default async function RevenuePage({
             `${totalNoShow} / ${totalCovers}`
           )}
         />
-        <Stat
-          label={ti(lang, "保留売上", "Kept (no-show deposit)")}
-          value={formatPHP(totalKept, lang)}
-          sub={ti(
-            lang,
-            "no-show時にデポジット保留",
-            "Deposits retained on no-show"
-          )}
-        />
-        <Stat
-          label={ti(lang, "失った売上", "Lost (no-show balance)")}
-          value={formatPHP(totalLost, lang)}
-          warn={totalLost > 0}
-          sub={ti(
-            lang,
-            "no-show時の残金未回収",
-            "Balance forfeited"
-          )}
-        />
+        {depositMode && (
+          <>
+            <Stat
+              label={ti(lang, "保留売上", "Kept (no-show deposit)")}
+              value={formatPHP(totalKept, lang)}
+              sub={ti(
+                lang,
+                "no-show時にデポジット保留",
+                "Deposits retained on no-show"
+              )}
+            />
+            <Stat
+              label={ti(lang, "失った売上", "Lost (no-show balance)")}
+              value={formatPHP(totalLost, lang)}
+              warn={totalLost > 0}
+              sub={ti(
+                lang,
+                "no-show時の残金未回収",
+                "Balance forfeited"
+              )}
+            />
+          </>
+        )}
       </div>
 
       {/* Bar chart */}
@@ -256,12 +257,16 @@ export default async function RevenuePage({
                 <th className="px-3 py-3 text-right">
                   {ti(lang, "No-show", "No-show")}
                 </th>
-                <th className="hidden px-3 py-3 text-right md:table-cell">
-                  {ti(lang, "保留売上", "Kept")}
-                </th>
-                <th className="hidden px-3 py-3 text-right md:table-cell">
-                  {ti(lang, "失った売上", "Lost")}
-                </th>
+                {depositMode && (
+                  <>
+                    <th className="hidden px-3 py-3 text-right md:table-cell">
+                      {ti(lang, "保留売上", "Kept")}
+                    </th>
+                    <th className="hidden px-3 py-3 text-right md:table-cell">
+                      {ti(lang, "失った売上", "Lost")}
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -315,24 +320,28 @@ export default async function RevenuePage({
                         <span className="text-text-muted">—</span>
                       )}
                     </td>
-                    <td className="hidden px-3 py-2.5 text-right font-mono admin-num md:table-cell">
-                      {d.no_show_deposit_kept_centavos > 0 ? (
-                        <span className="text-gold">
-                          {formatPHP(d.no_show_deposit_kept_centavos, lang)}
-                        </span>
-                      ) : (
-                        <span className="text-text-muted">—</span>
-                      )}
-                    </td>
-                    <td className="hidden px-3 py-2.5 text-right font-mono admin-num md:table-cell">
-                      {d.no_show_lost_centavos > 0 ? (
-                        <span className="text-red-400/80">
-                          {formatPHP(d.no_show_lost_centavos, lang)}
-                        </span>
-                      ) : (
-                        <span className="text-text-muted">—</span>
-                      )}
-                    </td>
+                    {depositMode && (
+                      <>
+                        <td className="hidden px-3 py-2.5 text-right font-mono admin-num md:table-cell">
+                          {d.no_show_deposit_kept_centavos > 0 ? (
+                            <span className="text-gold">
+                              {formatPHP(d.no_show_deposit_kept_centavos, lang)}
+                            </span>
+                          ) : (
+                            <span className="text-text-muted">—</span>
+                          )}
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-right font-mono admin-num md:table-cell">
+                          {d.no_show_lost_centavos > 0 ? (
+                            <span className="text-red-400/80">
+                              {formatPHP(d.no_show_lost_centavos, lang)}
+                            </span>
+                          ) : (
+                            <span className="text-text-muted">—</span>
+                          )}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
@@ -360,12 +369,16 @@ export default async function RevenuePage({
                 <td className="px-3 py-3 text-right font-mono admin-num text-red-400">
                   {totalNoShow}
                 </td>
-                <td className="hidden px-3 py-3 text-right font-mono admin-num text-gold md:table-cell">
-                  {formatPHP(totalKept, lang)}
-                </td>
-                <td className="hidden px-3 py-3 text-right font-mono admin-num text-red-400/80 md:table-cell">
-                  {formatPHP(totalLost, lang)}
-                </td>
+                {depositMode && (
+                  <>
+                    <td className="hidden px-3 py-3 text-right font-mono admin-num text-gold md:table-cell">
+                      {formatPHP(totalKept, lang)}
+                    </td>
+                    <td className="hidden px-3 py-3 text-right font-mono admin-num text-red-400/80 md:table-cell">
+                      {formatPHP(totalLost, lang)}
+                    </td>
+                  </>
+                )}
               </tr>
             </tfoot>
           </table>
@@ -381,108 +394,6 @@ export default async function RevenuePage({
           )}
         </p>
       )}
-    </div>
-  );
-}
-
-/**
- * Deposit-free / Stripe-disabled view. The revenue_daily / revenue_monthly
- * views aggregate `payments` rows that no longer exist, so the regular
- * revenue dashboard is meaningless here — we render a covers-only summary
- * (counts by status, party-size sum) drawn directly from `reservations`.
- */
-async function ReservationsOnlyView({
-  lang,
-  sb,
-  targetY,
-  targetM,
-  monthStart,
-  monthEnd,
-}: {
-  lang: AdminLang;
-  sb: ReturnType<typeof adminClient>;
-  targetY: number;
-  targetM: number;
-  monthStart: string;
-  monthEnd: string;
-}) {
-  const { data: rows } = await sb
-    .from("reservations")
-    .select("status, party_size, service_date")
-    .gte("service_date", monthStart)
-    .lte("service_date", monthEnd)
-    .returns<{ status: string; party_size: number; service_date: string }[]>();
-
-  const list = rows ?? [];
-  const total = list.length;
-  const covers = list.reduce((acc, r) => acc + r.party_size, 0);
-  const byStatus: Record<string, number> = {};
-  for (const r of list) {
-    byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
-  }
-  const confirmed = byStatus.confirmed ?? 0;
-  const cancelled =
-    (byStatus.cancelled_full ?? 0) +
-    (byStatus.cancelled_partial ?? 0) +
-    (byStatus.cancelled_late ?? 0);
-  const noShow = byStatus.no_show ?? 0;
-  const completed = byStatus.completed ?? 0;
-
-  return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-[family-name:var(--font-noto-serif)] text-2xl font-medium tracking-[0.04em] text-foreground sm:text-3xl">
-            <TrendingUp size={20} className="mr-2 inline-block text-gold" />
-            {ti(lang, "予約サマリー", "Reservations Summary")}
-          </h1>
-          <p className="mt-2 text-xs leading-relaxed text-text-muted">
-            {ti(
-              lang,
-              `${targetY}年 ${monthName(targetM, lang)}`,
-              `${monthName(targetM, lang)} ${targetY}`
-            )}
-          </p>
-        </div>
-        <MonthPicker year={targetY} month={targetM} lang={lang} />
-      </div>
-
-      <div className="mb-4 flex items-start gap-3 border border-border bg-surface/40 p-4 text-xs leading-relaxed text-text-muted">
-        <Info size={16} className="mt-0.5 flex-shrink-0 text-gold/70" />
-        <p>
-          {ti(
-            lang,
-            "デポジット非収受モードのため、売上データは記録されていません。予約件数のみ表示しています。",
-            "Deposit-free mode is active — payment data is not recorded. Reservation counts only."
-          )}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Stat label={ti(lang, "予約件数", "Reservations")} value={String(total)} />
-        <Stat label={ti(lang, "総客数", "Covers")} value={String(covers)} />
-        <Stat label={ti(lang, "確定", "Confirmed")} value={String(confirmed)} />
-        <Stat label={ti(lang, "完了", "Completed")} value={String(completed)} />
-        <Stat
-          label={ti(lang, "キャンセル", "Cancelled")}
-          value={String(cancelled + noShow)}
-        />
-      </div>
-
-      <p className="mt-6 text-[11px] leading-relaxed text-text-muted">
-        {ti(
-          lang,
-          "予約一覧の管理は ",
-          "Manage individual reservations in "
-        )}
-        <Link
-          href="/admin/reservations"
-          className="text-gold underline underline-offset-2 hover:text-gold-light"
-        >
-          /admin/reservations
-        </Link>
-        {ti(lang, " から行えます。", ".")}
-      </p>
     </div>
   );
 }
