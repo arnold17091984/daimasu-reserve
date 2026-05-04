@@ -21,7 +21,7 @@
  *  No Stripe touchpoints, no pending_payment limbo, no reap-pending step.
  */
 import "server-only";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { stripe, toStripeAmount } from "@/lib/stripe/client";
 import { issueCancelToken } from "@/lib/security/cancel-token";
@@ -176,32 +176,37 @@ export async function POST(req: NextRequest) {
   // seat_numbers is filled by the atomic RPC; surfaced for downstream
   // logging if needed (currently unused — Stripe metadata covers tracking).
 
-  // 5a. Deposit-free path: notify and return immediately, skip Stripe.
+  // 5a. Deposit-free path: row is already committed by the atomic RPC
+  // above. Push the side effects (Telegram fan-out, email log, audit
+  // insert) into the post-response phase via Next 16 after() so the
+  // booking confirmation lands in <1s instead of waiting on 2x Telegram
+  // round-trips + 3x notification_log inserts (~2.5-3s previously
+  // measured on 2026-05-04). Failure of any of these is logged but does
+  // NOT roll back the booking — the seat is already allocated.
   if (!depositRequired) {
-    // E2E test 2026-05-02 fix (H1): pass our already-issued token through
-    // so dispatch doesn't rotate the hash out from under us. The response
-    // below now returns a token that's actually valid against the DB.
-    try {
-      await sendConfirmationDispatch(bookedRow, sb, {preIssuedToken: tokenBundle});
-    } catch (err) {
-      // Notification failures must not roll back the booking — the row is
-      // already confirmed and the seat is allocated. Log only.
-      console.error("[reservations] sendConfirmationDispatch failed", err);
-    }
-    // E2E fix (H2): explicitly audit the deposit-free creation. The legacy
-    // Stripe flow logged via the webhook's reservation.confirm action; with
-    // no webhook in this path we'd have no audit trail at all otherwise.
-    await auditInsert(sb, {
-      actor: "system",
-      reservation_id: reservationId,
-      action: "reservation.confirm.deposit_free",
-      after_data: {
-        seating: input.seating,
-        service_date: input.service_date,
-        party_size: input.party_size,
-        seat_numbers: bookedRow.seat_numbers,
-      },
-      reason: "deposit-free flow — auto-confirmed at booking time",
+    after(async () => {
+      try {
+        // E2E test 2026-05-02 fix (H1): pass our already-issued token
+        // through so dispatch doesn't rotate the hash out from under us.
+        await sendConfirmationDispatch(bookedRow, sb, {preIssuedToken: tokenBundle});
+      } catch (err) {
+        console.error("[reservations] sendConfirmationDispatch failed", err);
+      }
+      // E2E fix (H2): audit the deposit-free creation. The legacy Stripe
+      // flow logged via the webhook's reservation.confirm action; with no
+      // webhook in this path we'd have no audit trail otherwise.
+      await auditInsert(sb, {
+        actor: "system",
+        reservation_id: reservationId,
+        action: "reservation.confirm.deposit_free",
+        after_data: {
+          seating: input.seating,
+          service_date: input.service_date,
+          party_size: input.party_size,
+          seat_numbers: bookedRow.seat_numbers,
+        },
+        reason: "deposit-free flow — auto-confirmed at booking time",
+      });
     });
     return NextResponse.json(
       {

@@ -10,7 +10,7 @@
  * state of the reservation. The client's preview is advisory only.
  */
 import "server-only";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { adminClient } from "@/lib/db/clients";
 import { stripe } from "@/lib/stripe/client";
@@ -222,38 +222,42 @@ export async function POST(req: NextRequest) {
     .select("*")
     .maybeSingle<Reservation>();
 
-  // 4. Audit
-  await sb.from("audit_log").insert({
-    actor: "guest",
-    reservation_id: reservation.id,
-    action: `reservation.cancel.${tier}`,
-    before_data: { status: reservation.status, deposit_centavos: reservation.deposit_centavos } as never,
-    after_data: { status: statusAfterCancel(tier), refund_centavos: refundCentavos, stripe_refund_id: stripeRefundId } as never,
-    reason: `self-cancel via signed link, ${Math.round(hours * 10) / 10}h remaining`,
+  // 4. Audit + 5. notifications — defer all to after-response so the
+  // user gets their cancel confirmation immediately. The cancel itself
+  // is already committed (status flipped above). Failure of any of these
+  // is logged but doesn't roll back the cancel. Perf fix 2026-05-04.
+  after(async () => {
+    await sb.from("audit_log").insert({
+      actor: "guest",
+      reservation_id: reservation.id,
+      action: `reservation.cancel.${tier}`,
+      before_data: { status: reservation.status, deposit_centavos: reservation.deposit_centavos } as never,
+      after_data: { status: statusAfterCancel(tier), refund_centavos: refundCentavos, stripe_refund_id: stripeRefundId } as never,
+      reason: `self-cancel via signed link, ${Math.round(hours * 10) / 10}h remaining`,
+    });
+
+    if (flipped) {
+      const { subject, html } = renderCancelEmail({
+        reservation: flipped,
+        refundCentavos,
+        tier,
+      });
+      await sendEmail({
+        to: flipped.guest_email,
+        subject,
+        html,
+        idempotencyKey: `email:cancel:${flipped.id}:${tier}`,
+        log: { reservation_id: flipped.id, kind: "cancel_confirm" },
+      });
+
+      await notifyTelegram({
+        text: renderTelegramCancelled(flipped, refundCentavos, tier),
+        tokenOverride: settings.telegram_bot_token,
+        chatIdOverride: settings.telegram_chat_id,
+        log: { reservation_id: flipped.id, kind: "admin_alert" },
+      });
+    }
   });
-
-  // 5. Notify customer + ops
-  if (flipped) {
-    const { subject, html } = renderCancelEmail({
-      reservation: flipped,
-      refundCentavos,
-      tier,
-    });
-    await sendEmail({
-      to: flipped.guest_email,
-      subject,
-      html,
-      idempotencyKey: `email:cancel:${flipped.id}:${tier}`,
-      log: { reservation_id: flipped.id, kind: "cancel_confirm" },
-    });
-
-    await notifyTelegram({
-      text: renderTelegramCancelled(flipped, refundCentavos, tier),
-      tokenOverride: settings.telegram_bot_token,
-      chatIdOverride: settings.telegram_chat_id,
-      log: { reservation_id: flipped.id, kind: "admin_alert" },
-    });
-  }
 
   return NextResponse.json({
     ok: true,
