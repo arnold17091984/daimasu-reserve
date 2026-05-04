@@ -37,6 +37,15 @@ export function ResetPasswordForm() {
         setErrorMsg(error.message);
         return;
       }
+      // Clear the recovery-session lock cookie (Codex 2026-05-04 H2 fix
+      // companion). Best-effort — even if this call fails the cookie
+      // expires in 15min, but the user would temporarily see /admin
+      // bounce them back to /admin/login until then.
+      try {
+        await fetch("/admin/auth/reset-password/finish", { method: "POST" });
+      } catch {
+        // ignore — cookie expires on its own
+      }
       setStatus("success");
       // Brief pause so user sees confirmation, then forward to admin.
       setTimeout(() => {

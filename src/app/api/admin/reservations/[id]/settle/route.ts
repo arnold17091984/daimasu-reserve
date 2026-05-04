@@ -66,8 +66,14 @@ export async function POST(
     return NextResponse.json({ ok: false, error: payErr.message }, { status: 500 });
   }
 
-  // Flip reservation to completed
-  const { error: updErr } = await sb
+  // Flip reservation to completed.
+  // Codex review 2026-05-04 H3 fix: confirm the UPDATE actually flipped a
+  // row. The .eq("status", "confirmed") guard already prevents writing to
+  // a row another transaction has already cancelled, but without checking
+  // affected-rows the handler then proceeds to issue an OR receipt and
+  // record audit for a settlement that didn't happen. Use .select() to
+  // get rowcount and 409-out if 0 rows matched.
+  const { data: flipped, error: updErr } = await sb
     .from("reservations")
     .update({
       status: "completed",
@@ -77,9 +83,17 @@ export async function POST(
         reservation.deposit_centavos + parsed.data.amount_centavos,
     })
     .eq("id", id)
-    .eq("status", "confirmed");
+    .eq("status", "confirmed")
+    .select("id")
+    .maybeSingle<{ id: string }>();
   if (updErr) {
     return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+  }
+  if (!flipped) {
+    return NextResponse.json(
+      { ok: false, error: "reservation_state_changed" },
+      { status: 409 }
+    );
   }
 
   // Issue the BIR Official Receipt for this settlement (S2 + S3).

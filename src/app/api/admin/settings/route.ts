@@ -26,10 +26,32 @@ const schema = z
     refund_partial_hours: z.number().int().min(0).max(168),
     reminder_long_hours: z.number().int().min(0).max(72),
     reminder_short_hours: z.number().int().min(0).max(72),
-    telegram_bot_token: z.string().nullable().optional(),
-    telegram_chat_id: z.string().nullable().optional(),
-    whatsapp_from_number: z.string().nullable().optional(),
-    resend_from_email: z.string().email().nullable().optional(),
+    // Codex review 2026-05-04 M2 fix: format-validate the notification
+    // creds so the UI cannot accept obvious garbage. The values flow into
+    // outbound HTTP calls to Telegram / Twilio / Resend; failing fast here
+    // gives the operator a real error instead of a silent dead channel
+    // discovered later in notification_log.
+    //  - Telegram bot tokens: "<numeric_id>:<35+ char tail>"
+    //  - Telegram chat ids: integer or comma-separated list (fan-out, see
+    //    src/lib/notifications/telegram.ts).
+    //  - WhatsApp Twilio sender: E.164 prefixed with "whatsapp:".
+    //  - Resend from-email: standard email validation.
+    telegram_bot_token: z
+      .string()
+      .regex(/^\d{6,12}:[A-Za-z0-9_-]{20,80}$/, "telegram_bot_token must look like '12345:ABC...'")
+      .nullable()
+      .optional(),
+    telegram_chat_id: z
+      .string()
+      .regex(/^-?\d{5,20}(\s*,\s*-?\d{5,20})*$/, "telegram_chat_id must be a number or comma-separated list")
+      .nullable()
+      .optional(),
+    whatsapp_from_number: z
+      .string()
+      .regex(/^whatsapp:\+[1-9]\d{7,14}$/, "whatsapp_from_number must look like 'whatsapp:+639170000000'")
+      .nullable()
+      .optional(),
+    resend_from_email: z.string().email().max(254).nullable().optional(),
     timezone: z.string().min(3).max(40),
     monthly_revenue_target_centavos: z.number().int().min(0),
     display_name: z.string().min(1).max(80),

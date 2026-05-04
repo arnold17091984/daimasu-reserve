@@ -174,7 +174,12 @@ export async function POST(
         : "cancelled_late"
     : statusAfterCancel(autoTier);
 
-  await sb
+  // Codex review 2026-05-04 H3 fix: confirm the UPDATE actually flipped a
+  // row. By the time we reach this line, the Stripe refund (if any) has
+  // already executed; if a concurrent settle / cancel beat us to the
+  // status flip we'd otherwise audit-log + (possibly) double-refund.
+  // Detect the no-rows case and 409.
+  const { data: flipped } = await sb
     .from("reservations")
     .update({
       status: newStatus,
@@ -182,7 +187,19 @@ export async function POST(
       cancelled_by: "staff",
     })
     .eq("id", reservation.id)
-    .in("status", ["pending_payment", "confirmed"]);
+    .in("status", ["pending_payment", "confirmed"])
+    .select("id")
+    .maybeSingle<{ id: string }>();
+  if (!flipped) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "reservation_state_changed",
+        refund_already_issued_centavos: refundCentavos,
+      },
+      { status: 409 }
+    );
+  }
 
   await sb.from("audit_log").insert({
     actor: admin.email,

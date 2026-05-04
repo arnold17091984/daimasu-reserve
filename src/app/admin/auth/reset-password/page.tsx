@@ -14,12 +14,21 @@
  * to be a logged-in surface that can call updateUser. We render a small
  * client form below.
  */
+import { redirect } from "next/navigation";
+import { getAdminAllowingRecovery } from "@/lib/auth/admin";
 import { ResetPasswordForm } from "./reset-form";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default function ResetPasswordPage() {
+export default async function ResetPasswordPage() {
+  // Allow recovery-locked sessions through (the whole point of this page),
+  // but still require allowlisted admin email — so a recovery link for a
+  // non-admin email goes nowhere.
+  const admin = await getAdminAllowingRecovery();
+  if (!admin) {
+    redirect("/admin/login");
+  }
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6">
       <div className="w-full max-w-md border border-border bg-surface p-8 sm:p-12">

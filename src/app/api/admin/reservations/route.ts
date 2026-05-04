@@ -21,6 +21,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  // Auth first — defence-in-depth. The previous order parsed + validated
+  // the body before checking auth, which leaked schema details (and a
+  // 400/422 timing channel) to anonymous callers. Every other admin route
+  // already gates on getAdmin() before reading the body; align this one.
+  const admin = await getAdmin();
+  if (!admin) {
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -39,11 +48,6 @@ export async function POST(req: NextRequest) {
     );
   }
   const input = parsed.data;
-
-  const admin = await getAdmin();
-  if (!admin) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
 
   const sb = adminClient();
   const { data: settings } = await sb
