@@ -39,8 +39,15 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   // Standalone build for Vultr Docker deployment.
-  // Produces .next/standalone/ which can be copied into a slim Node image.
-  // output: "standalone",  // disabled - pm2 starts via "next start", env vars only flow through that path
+  // Produces .next/standalone/ which the Dockerfile copies into a slim Node image
+  // and runs via `node server.js`. Runtime env vars are injected via
+  // docker-compose env_file (/opt/daimasu/.env.production), which standalone
+  // respects through process.env at request time.
+  output: "standalone",
+  // Pin trace root to this project so standalone output lands at
+  // .next/standalone/server.js, not nested under any parent package.json
+  // that may exist on a developer's machine (Next.js otherwise walks up).
+  outputFileTracingRoot: process.cwd(),
   images: {
     // Vultr deploy serves images from /public and Supabase Storage URLs;
     // skip the loader to avoid extra runtime cost on a single-VM host.
