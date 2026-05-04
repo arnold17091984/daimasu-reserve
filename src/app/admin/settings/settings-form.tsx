@@ -3,11 +3,12 @@
 import { useState, useMemo } from "react";
 import { CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import type { RestaurantSettings } from "@/lib/db/types";
-import { NumPadInput } from "../_components/num-pad-input";
-import { TextFieldButton } from "../_components/text-field-button";
 
 type Lang = "ja" | "en";
 const ti = (lang: Lang, ja: string, en: string) => (lang === "ja" ? ja : en);
+
+const settingsInputCls =
+  "border border-border bg-background/50 px-3 py-2.5 text-sm text-foreground focus:border-gold/60 focus:outline-none";
 
 const DANGER_FIELDS = [
   "course_price_centavos",
@@ -350,18 +351,26 @@ function NumberField({
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">{label}</span>
-      <NumPadInput
-        value={String(value)}
-        onChange={(s) => {
-          let n = parseInt(s, 10);
-          if (Number.isNaN(n)) n = min ?? 0;
+      <input
+        type="number"
+        inputMode="numeric"
+        value={Number.isFinite(value) ? String(value) : ""}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") {
+            onChange(min ?? 0);
+            return;
+          }
+          let n = parseInt(raw, 10);
+          if (Number.isNaN(n)) return;
           if (typeof min === "number") n = Math.max(min, n);
           if (typeof max === "number") n = Math.min(max, n);
           onChange(n);
         }}
-        label={label}
+        min={min}
+        max={max}
         placeholder="0"
-        maxIntegerDigits={9}
+        className={settingsInputCls}
       />
       {help && <span className="admin-meta normal-case tracking-normal">{help}</span>}
     </div>
@@ -392,15 +401,15 @@ function TextField({
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">{label}</span>
-      <TextFieldButton
+      <input
+        type={type ?? "text"}
         value={value}
-        onChange={onChange}
-        label={label}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        type={type}
         inputMode={inputMode}
         autoCapitalize={autoCapitalize}
         autoComplete={autoComplete}
+        className={settingsInputCls}
       />
       {help && <span className="admin-meta normal-case tracking-normal">{help}</span>}
     </div>

@@ -6,7 +6,8 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import type { Reservation, PaymentMethod } from "@/lib/db/types";
 import { formatPHP, receiptBreakdown } from "@/lib/domain/reservation";
 import type { AdminLang } from "@/lib/auth/admin-lang";
-import { NumPadInput } from "../../_components/num-pad-input";
+const settleInputCls =
+  "border border-border bg-background/50 px-3 py-2.5 text-sm text-foreground focus:border-gold/60 focus:outline-none";
 
 const METHODS: {
   value: PaymentMethod;
@@ -102,18 +103,27 @@ export function SettleForm({
 
       <div className="flex flex-col gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">
         <span>{ti("受領合計 (₱)", "Total received (₱)")}</span>
-        <NumPadInput
-          value={amountPesos}
-          onChange={setAmountPesos}
-          label={ti("受領合計を入力", "Enter total received")}
-          subText={ti(
+        <div className="flex items-stretch">
+          <span className="flex items-center border border-r-0 border-border bg-background/30 px-3 text-sm text-text-secondary">
+            ₱
+          </span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min={0}
+            value={amountPesos}
+            onChange={(e) => setAmountPesos(e.target.value)}
+            placeholder="0"
+            className={`${settleInputCls} flex-1`}
+          />
+        </div>
+        <span className="text-[11px] normal-case text-text-secondary">
+          {ti(
             `店舗精算 ${formatPHP(onSiteDueCentavos, lang)} (税サ込)`,
             `On-site due ${formatPHP(onSiteDueCentavos, lang)} (incl. tax/svc)`
           )}
-          prefix="₱"
-          allowDecimal
-          placeholder="0"
-        />
+        </span>
         <span className="admin-meta normal-case tracking-normal">
           {ti(
             "ドリンク等のアップセルもここで合計可能。",

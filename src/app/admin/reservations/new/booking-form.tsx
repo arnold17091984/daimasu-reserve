@@ -6,13 +6,24 @@ import { Loader2, CheckCircle2, X, Armchair } from "lucide-react";
 import type { RestaurantSettings, SeatingSlot } from "@/lib/db/types";
 import { autoAllocateSeats, formatPHP } from "@/lib/domain/reservation";
 import type { AdminLang } from "@/lib/auth/admin-lang";
-import type { AdminTheme } from "@/lib/auth/admin-theme";
-import { NumPadInput } from "../../_components/num-pad-input";
-import { TextFieldButton } from "../../_components/text-field-button";
-import { DateFieldButton } from "../../_components/date-field-button";
 import { CelebrationPanel, EMPTY_CELEBRATION } from "../../_components/celebration-panel";
 import { CelebrationReview } from "../../_components/celebration-display";
 import type { CelebrationData } from "@/lib/db/types";
+
+// Country dial codes shown in the phone field. PH first since the bar
+// is in Makati and most guests enter local numbers; the rest cover the
+// dominant inbound markets (JP/US/SG/HK/KR/CN/GB/AU).
+const COUNTRY_CODES = [
+  { code: "+63", label: "PH +63" },
+  { code: "+81", label: "JP +81" },
+  { code: "+1", label: "US +1" },
+  { code: "+65", label: "SG +65" },
+  { code: "+852", label: "HK +852" },
+  { code: "+82", label: "KR +82" },
+  { code: "+86", label: "CN +86" },
+  { code: "+44", label: "GB +44" },
+  { code: "+61", label: "AU +61" },
+] as const;
 
 interface DayCell {
   date: string;
@@ -27,14 +38,12 @@ interface DayCell {
 
 export function ManualBookingForm({
   lang,
-  theme,
   settings,
   grid,
   defaultDate,
   defaultSeating,
 }: {
   lang: AdminLang;
-  theme: AdminTheme;
   settings: RestaurantSettings;
   grid: DayCell[];
   defaultDate?: string;
@@ -52,7 +61,8 @@ export function ManualBookingForm({
   const [offsetDays, setOffsetDays] = useState(0);
   const [celebration, setCelebration] = useState<CelebrationData>(EMPTY_CELEBRATION);
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [countryCode, setCountryCode] = useState<string>("+63");
+  const [phoneLocal, setPhoneLocal] = useState("");
   const [email, setEmail] = useState("");
   const [guestLang, setGuestLang] = useState<"ja" | "en">("en");
   const [notes, setNotes] = useState("");
@@ -131,14 +141,14 @@ export function ManualBookingForm({
     pickedSeats.length === partySize &&
     pickedSeats.every((n) => !takenSet.has(n));
 
-  // Required-field validation. The phone "+63 " prefix is the visual
-  // hint we pre-fill; treat it as empty until the operator types digits
-  // after it.
+  // Required-field validation. The country dial code is always present
+  // (default +63), so phone validity hinges on the local-number digits.
   const trimmedName = name.trim();
-  const trimmedPhone = phone.trim();
-  const phoneHasDigits = /\d/.test(trimmedPhone.replace(/^\+?\d{1,3}\s*/, ""));
+  const trimmedPhoneLocal = phoneLocal.trim();
+  const phoneDigits = trimmedPhoneLocal.replace(/\D/g, "");
+  const fullPhone = `${countryCode} ${trimmedPhoneLocal}`.trim();
   const nameMissing = trimmedName.length === 0;
-  const phoneMissing = trimmedPhone.length === 0 || !phoneHasDigits;
+  const phoneMissing = phoneDigits.length === 0;
   const partySizeMissing = partySize < 1;
 
   // Show validation only after the first submit attempt (avoids
@@ -185,7 +195,7 @@ export function ManualBookingForm({
           party_size: partySize,
           guest_name: name,
           guest_email: email,
-          guest_phone: phone,
+          guest_phone: fullPhone,
           guest_lang: guestLang,
           notes: notes.trim() || null,
           source,
@@ -228,7 +238,7 @@ export function ManualBookingForm({
         partySize={partySize}
         guestName={trimmedName}
         guestEmail={email.trim()}
-        guestPhone={trimmedPhone}
+        guestPhone={fullPhone}
         guestLang={guestLang}
         notes={notes.trim()}
         source={source}
@@ -337,17 +347,23 @@ export function ManualBookingForm({
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={ti("日付", "Date")}>
-            <DateFieldButton
+            <input
+              type="date"
               value={date}
-              onChange={setDate}
-              label={ti("日付を選択", "Pick a date")}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (!next) return;
+                const closed = grid.find((g) => g.date === next)?.closed;
+                if (closed) {
+                  // Disallow closed dates; native <input type="date"> can't
+                  // disable arbitrary days, so guard on commit instead.
+                  return;
+                }
+                setDate(next);
+              }}
               min={grid[0]?.date}
               max={grid[grid.length - 1]?.date}
-              disabledDates={
-                new Set(grid.filter((g) => g.closed).map((g) => g.date))
-              }
-              lang={lang}
-              theme={theme}
+              className={inputCls}
             />
           </Field>
           <Field label={ti("時間帯", "Seating")}>
@@ -367,32 +383,25 @@ export function ManualBookingForm({
             </div>
           </Field>
           <Field label={ti("人数", "Party size")}>
-            <NumPadInput
-              value={String(partySize)}
-              onChange={(s) => {
-                // Cap to online_seats (8); allow 0 (= unset) and let the
-                // submit button's disabled state guard against zero. The
-                // over-capacity warning fires when typed > seatRemaining.
-                const raw = s === "" ? 0 : parseInt(s, 10);
-                const n = Number.isNaN(raw) ? 0 : raw;
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={Math.min(20, settings.online_seats)}
+              value={partySize === 0 ? "" : String(partySize)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  setPartySize(0);
+                  return;
+                }
+                const n = parseInt(raw, 10);
+                if (Number.isNaN(n)) return;
                 const cap = Math.min(20, settings.online_seats);
                 setPartySize(Math.min(Math.max(0, n), cap));
               }}
-              label={ti("人数を入力", "Enter party size")}
-              subText={
-                seatRemaining === 0
-                  ? ti(
-                      "この時間帯は満席です",
-                      "This slot is FULL"
-                    )
-                  : ti(
-                      `この時間帯の残り席: ${seatRemaining} 名分`,
-                      `Seats remaining: ${seatRemaining}`
-                    )
-              }
-              suffix={ti("名", " pax")}
-              maxIntegerDigits={1}
               placeholder={ti("人数を入力", "Enter party size")}
+              className={inputCls}
             />
             {seatRemaining === 0 ? (
               <span className="border border-red-500/60 bg-red-500/[0.10] px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.10em] text-red-400">
@@ -551,15 +560,16 @@ export function ManualBookingForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={ti("お客様名 *", "Guest name *")}>
-            <TextFieldButton
+            <input
+              type="text"
               value={name}
-              onChange={setName}
-              label={ti("お客様名 (必須)", "Guest name (required)")}
+              onChange={(e) => setName(e.target.value)}
               placeholder={ti("例: 山田 太郎", "e.g. Yamada Taro")}
               autoCapitalize="words"
               autoComplete="name"
               maxLength={80}
               required
+              className={inputCls}
             />
             {showValidation && nameMissing && (
               <span className="text-[12px] font-medium text-red-400">
@@ -568,18 +578,35 @@ export function ManualBookingForm({
             )}
           </Field>
           <Field label={ti("電話番号 *", "Phone *")}>
-            <TextFieldButton
-              value={phone}
-              onChange={setPhone}
-              label={ti("電話番号 (必須)", "Phone (required)")}
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="+63 9XX XXX XXXX"
-              maxLength={30}
-              required
-              hint={ti("国番号 +63 から", "Start with country code +63")}
-            />
+            <div className="grid grid-cols-[110px_1fr] gap-2">
+              <select
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                className={inputCls}
+                aria-label={ti("国番号", "Country code")}
+              >
+                {COUNTRY_CODES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                value={phoneLocal}
+                onChange={(e) => setPhoneLocal(e.target.value)}
+                placeholder={
+                  countryCode === "+63"
+                    ? "9XX XXX XXXX"
+                    : ti("番号を入力", "Phone number")
+                }
+                maxLength={30}
+                required
+                className={inputCls}
+              />
+            </div>
             {showValidation && phoneMissing && (
               <span className="text-[12px] font-medium text-red-400">
                 {ti("電話番号が入力されていません", "Phone number is required")}
@@ -587,16 +614,16 @@ export function ManualBookingForm({
             )}
           </Field>
           <Field label={ti("メール (任意)", "Email (optional)")}>
-            <TextFieldButton
-              value={email}
-              onChange={setEmail}
-              label={ti("メール", "Email")}
+            <input
               type="email"
               inputMode="email"
               autoCapitalize="none"
               autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="guest@example.com"
               maxLength={254}
+              className={inputCls}
             />
           </Field>
           <Field label={ti("お客様の言語", "Guest language")}>
@@ -612,22 +639,23 @@ export function ManualBookingForm({
         </div>
 
         <Field label={ti("備考 (アレルギー・記念日など)", "Notes (allergies, occasion)")}>
-          <TextFieldButton
+          <textarea
             value={notes}
-            onChange={setNotes}
-            label={ti("備考", "Notes")}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder={ti(
               "例: 乳製品アレルギー / 誕生日サプライズ",
               "e.g. dairy allergy, birthday surprise"
             )}
-            multiline
             rows={4}
             maxLength={280}
-            hint={ti(
+            className={`${inputCls} resize-y`}
+          />
+          <span className="admin-meta normal-case tracking-normal">
+            {ti(
               "Telegram / メールでスタッフに共有されます。",
               "Visible to staff in Telegram / email."
             )}
-          />
+          </span>
         </Field>
 
         <CelebrationPanel

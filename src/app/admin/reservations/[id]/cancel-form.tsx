@@ -6,8 +6,8 @@ import { Loader2, AlertTriangle } from "lucide-react";
 import type { Reservation } from "@/lib/db/types";
 import type { AdminLang } from "@/lib/auth/admin-lang";
 import { formatPHP } from "@/lib/domain/reservation";
-import { NumPadInput } from "../../_components/num-pad-input";
-import { TextFieldButton } from "../../_components/text-field-button";
+const cancelInputCls =
+  "border border-border bg-background/50 px-3 py-2.5 text-sm text-foreground focus:border-gold/60 focus:outline-none";
 
 /**
  * Owner-side cancellation with refund override.
@@ -119,18 +119,21 @@ export function CancelWithRefundForm({
         <>
           <div className="flex flex-col gap-1.5 text-[11px] font-medium uppercase tracking-[0.10em] text-text-secondary">
             <span>{ti("返金額 (₱)", "Refund amount (₱)")}</span>
-            <NumPadInput
-              value={amountPesos}
-              onChange={setAmountPesos}
-              label={ti("返金額を入力", "Enter refund amount")}
-              subText={ti(
-                `預かり中: ${formatPHP(reservation.deposit_centavos, lang)}`,
-                `Held: ${formatPHP(reservation.deposit_centavos, lang)}`
-              )}
-              prefix="₱"
-              allowDecimal
-              placeholder="0"
-            />
+            <div className="flex items-stretch">
+              <span className="flex items-center border border-r-0 border-border bg-background/30 px-3 text-sm text-text-secondary">
+                ₱
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min={0}
+                value={amountPesos}
+                onChange={(e) => setAmountPesos(e.target.value)}
+                placeholder="0"
+                className={`${cancelInputCls} flex-1`}
+              />
+            </div>
             <span className="text-[11px] normal-case text-text-secondary">
               {ti(
                 `預かり中: ${formatPHP(reservation.deposit_centavos, lang)}`,
@@ -140,22 +143,23 @@ export function CancelWithRefundForm({
           </div>
           <div className="flex flex-col gap-1.5 text-[11px] font-medium uppercase tracking-[0.10em] text-text-secondary">
             <span>{ti("理由 (監査ログに残ります)", "Reason (logged for audit)")}</span>
-            <TextFieldButton
+            <textarea
               value={reason}
-              onChange={setReason}
-              label={ti("オーバーライドの理由", "Override reason")}
-              multiline
+              onChange={(e) => setReason(e.target.value)}
               rows={3}
               maxLength={280}
               placeholder={ti(
                 "例: 体調不良のため特例で全額返金",
                 "e.g. illness — full refund as goodwill"
               )}
-              hint={ti(
+              className={`${cancelInputCls} resize-y`}
+            />
+            <span className="text-[11px] normal-case text-text-secondary">
+              {ti(
                 "audit_log にスタッフ名と一緒に記録されます。",
                 "Stored with the staff identity in audit_log."
               )}
-            />
+            </span>
           </div>
         </>
       )}
