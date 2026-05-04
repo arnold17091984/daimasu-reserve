@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { getAdmin } from "@/lib/auth/admin";
 import { LoginForm } from "./login-form";
 
 export const runtime = "nodejs";
@@ -8,6 +10,14 @@ interface PageProps {
 }
 
 export default async function AdminLoginPage({ searchParams }: PageProps) {
+  // If a valid admin session already exists (e.g. left over from a previous
+  // browser tab), forward to /admin instead of showing the login form on top
+  // of the sidebar — that mixed state confused the user 2026-05-04.
+  const existing = await getAdmin();
+  if (existing) {
+    redirect("/admin");
+  }
+
   const { error } = await searchParams;
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6">
@@ -20,7 +30,7 @@ export default async function AdminLoginPage({ searchParams }: PageProps) {
             Owner Sign-In
           </h1>
           <p className="mt-2 admin-caption">
-            We&apos;ll email you a one-tap sign-in link.
+            Sign in with your email and password.
           </p>
         </div>
         {error && (
