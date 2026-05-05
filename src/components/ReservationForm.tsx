@@ -10,9 +10,11 @@ import { publicEnv } from "@/lib/env";
 
 const DEPOSIT_REQUIRED = publicEnv.depositRequired;
 
+// End-times surfaced inline so guests can plan their evening before
+// booking (UX 2026-05-06 N5). Course is ~90 min; allow ~5 min buffer.
 const SEATINGS = [
-  { value: "s1" as const, label: { ja: "1部 17:30", en: "Seating 1 · 17:30" } },
-  { value: "s2" as const, label: { ja: "2部 20:00", en: "Seating 2 · 20:00" } },
+  { value: "s1" as const, label: { ja: "1部 17:30〜19:00", en: "Seating 1 · 17:30–19:00" } },
+  { value: "s2" as const, label: { ja: "2部 20:00〜21:30", en: "Seating 2 · 20:00–21:30" } },
 ];
 
 type Status = "idle" | "sending" | "redirecting" | "error";
@@ -65,7 +67,7 @@ interface ApiErr {
   error:
     | { code: "validation"; details?: unknown }
     | { code: "closed_date" }
-    | { code: "capacity_exceeded" }
+    | { code: "capacity_exceeded"; tried_seating?: "s1" | "s2" }
     | { code: "reservations_closed" }
     | { code: "internal"; reason?: string };
 }
@@ -631,15 +633,40 @@ export default function ReservationForm() {
           {status === "error" && errorMsg && (
             <div
               role="alert"
-              className="flex items-start gap-3 border border-red-500/60 bg-red-500/10 p-4 text-sm text-red-400"
+              className="flex flex-col gap-3 border border-red-500/60 bg-red-500/10 p-4 text-sm text-red-400"
             >
-              <AlertCircle size={18} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
-              <div>
-                <p className="mb-1 font-medium">
-                  {t("送信に失敗しました", "Submission failed")}
-                </p>
-                <p className="text-xs leading-relaxed">{errorMsg}</p>
+              <div className="flex items-start gap-3">
+                <AlertCircle
+                  size={18}
+                  className="mt-0.5 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="mb-1 font-medium">
+                    {t("送信に失敗しました", "Submission failed")}
+                  </p>
+                  <p className="text-xs leading-relaxed">{errorMsg}</p>
+                </div>
               </div>
+              {/* Capacity-specific helper: offer the other seating on the
+                  same date as a one-tap swap. UX 2026-05-06 (Persona
+                  Japanese expat) flagged that the previous "pick another
+                  time or date" message left the user to retry manually. */}
+              {errorMsg.includes(t("満席", "full")) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSeating(seating === "s1" ? "s2" : "s1");
+                    setStatus("idle");
+                    setErrorMsg(null);
+                  }}
+                  className="self-start border border-gold/60 bg-gold/[0.08] px-3 py-2 text-[12px] font-medium uppercase tracking-[0.10em] text-gold hover:bg-gold/[0.20]"
+                >
+                  {seating === "s1"
+                    ? t("→ 第2部 (20:00) で再試行", "→ Try Seating 2 (20:00)")
+                    : t("→ 第1部 (17:30) で再試行", "→ Try Seating 1 (17:30)")}
+                </button>
+              )}
             </div>
           )}
         </div>

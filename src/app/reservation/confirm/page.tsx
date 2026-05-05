@@ -132,8 +132,27 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
             </p>
           </div>
 
-          {/* back home */}
-          <div className="mt-10 flex justify-center">
+          {/* Repeat-booking shortcut + back home + calendar add. UX
+              2026-05-06 (Persona Japanese expat) flagged that quarterly-
+              repeat guests had to re-enter everything from the homepage;
+              surface a quick CTA to land them straight on the form. The
+              .ics download (N3) lets them add the booking to Google /
+              Apple Calendar without manual transcription. */}
+          <div className="mt-10 flex flex-col items-center gap-4">
+            <div className="flex flex-wrap justify-center gap-3">
+              <a
+                href={`/api/reservations/${reservation.id}/calendar`}
+                className="btn-ornate-ghost inline-flex items-center justify-center gap-2 px-5 py-3 font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.14em]"
+              >
+                {t("カレンダーに追加 (.ics)", "Add to calendar (.ics)")}
+              </a>
+              <Link
+                href="/#reservation"
+                className="btn-gold-ornate inline-flex items-center justify-center px-5 py-3 font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.14em]"
+              >
+                {t("もう1件予約する", "Book another night")}
+              </Link>
+            </div>
             <Link
               href="/"
               className="text-xs uppercase tracking-[0.18em] text-gold/70 transition-colors hover:text-gold"
