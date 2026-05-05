@@ -12,7 +12,13 @@ import type { CelebrationData } from "@/lib/db/types";
 
 // Country dial codes shown in the phone field. PH first since the bar
 // is in Makati and most guests enter local numbers; the rest cover the
-// dominant inbound markets (JP/US/SG/HK/KR/CN/GB/AU).
+// dominant inbound markets (JP/US/SG/HK/KR/CN/GB/AU). The "other" sentinel
+// switches the local-number input into "full international" mode where
+// the operator types `+886 9171234567` directly — no prefix is added by
+// the form. Without this, an operator handling a non-listed country would
+// type `+886...` into the local field with PH still selected, producing
+// an invalid `+63 +886...` save (Codex 2026-05-06 finding).
+const COUNTRY_OTHER = "other";
 const COUNTRY_CODES = [
   { code: "+63", label: "PH +63" },
   { code: "+81", label: "JP +81" },
@@ -23,6 +29,7 @@ const COUNTRY_CODES = [
   { code: "+86", label: "CN +86" },
   { code: "+44", label: "GB +44" },
   { code: "+61", label: "AU +61" },
+  { code: COUNTRY_OTHER, label: "Other / その他" },
 ] as const;
 
 interface DayCell {
@@ -146,14 +153,24 @@ export function ManualBookingForm({
     pickedSeats.length === partySize &&
     pickedSeats.every((n) => !takenSet.has(n));
 
-  // Required-field validation. The country dial code is always present
-  // (default +63), so phone validity hinges on the local-number digits.
+  // Required-field validation. With a real dial code selected, the prefix
+  // is added on submit; with COUNTRY_OTHER the operator types the full
+  // international number into the local field directly (must start with +).
   const trimmedName = name.trim();
   const trimmedPhoneLocal = phoneLocal.trim();
   const phoneDigits = trimmedPhoneLocal.replace(/\D/g, "");
-  const fullPhone = `${countryCode} ${trimmedPhoneLocal}`.trim();
+  const isCustomCountry = countryCode === COUNTRY_OTHER;
+  const fullPhone = isCustomCountry
+    ? trimmedPhoneLocal
+    : `${countryCode} ${trimmedPhoneLocal}`.trim();
   const nameMissing = trimmedName.length === 0;
   const phoneMissing = phoneDigits.length === 0;
+  // In custom-country mode the operator must type the leading "+". In
+  // listed-country mode "+" anywhere in the local input is invalid (the
+  // server regex rejects it; refuse on the client too with a clear message).
+  const phoneInvalid = isCustomCountry
+    ? !trimmedPhoneLocal.startsWith("+")
+    : trimmedPhoneLocal.includes("+");
   // Codex review 2026-05-05 P2: server schema (lib/domain/schemas.ts)
   // caps guest_phone at 30 chars after the dial code is prefixed. Cap
   // the local-number maxLength relative to the chosen country code so
@@ -161,10 +178,12 @@ export function ManualBookingForm({
   // `fullPhone` that the server rejects after the operator already
   // confirmed the review screen.
   const PHONE_MAX = 30;
-  const phoneLocalMaxLength = Math.max(
-    1,
-    PHONE_MAX - (countryCode.length + 1), // +1 for the joining space
-  );
+  // In custom mode the local field IS the full phone, so the cap equals
+  // PHONE_MAX. In listed mode the prefix and joining space are added at
+  // submit, so subtract them so the server-side cap can never be exceeded.
+  const phoneLocalMaxLength = isCustomCountry
+    ? PHONE_MAX
+    : Math.max(1, PHONE_MAX - (countryCode.length + 1));
   const phoneTooLong = fullPhone.length > PHONE_MAX;
   const partySizeMissing = partySize < 1;
 
@@ -180,6 +199,7 @@ export function ManualBookingForm({
     if (
       nameMissing ||
       phoneMissing ||
+      phoneInvalid ||
       phoneTooLong ||
       partySizeMissing ||
       dateClosed ||
@@ -610,25 +630,58 @@ export function ManualBookingForm({
               <input
                 type="tel"
                 inputMode="tel"
-                autoComplete="tel-national"
+                autoComplete={isCustomCountry ? "tel" : "tel-national"}
                 value={phoneLocal}
-                onChange={(e) => setPhoneLocal(e.target.value)}
+                onChange={(e) => {
+                  // Listed-country mode: strip any "+" the operator pastes
+                  // so we never produce `+63 +886...` (Codex 2026-05-06).
+                  // Custom mode: preserve the leading "+" since it IS the
+                  // country code.
+                  const raw = e.target.value;
+                  setPhoneLocal(isCustomCountry ? raw : raw.replace(/\+/g, ""));
+                }}
                 placeholder={
-                  countryCode === "+63"
-                    ? "9XX XXX XXXX"
-                    : ti("番号を入力", "Phone number")
+                  isCustomCountry
+                    ? "+886 9XX XXX XXXX"
+                    : countryCode === "+63"
+                      ? "9XX XXX XXXX"
+                      : ti("番号を入力", "Phone number")
                 }
                 maxLength={phoneLocalMaxLength}
                 required
                 className={inputCls}
               />
             </div>
+            <span className="admin-meta normal-case tracking-normal">
+              {isCustomCountry
+                ? ti(
+                    "国番号 (+xxx) から続けて入力してください",
+                    "Type the full international number including the country code (+xxx)"
+                  )
+                : ti(
+                    "リスト外の国は「Other / その他」を選んでください",
+                    "Pick \"Other\" for countries not in the list"
+                  )}
+            </span>
             {showValidation && phoneMissing && (
               <span className="text-[12px] font-medium text-red-400">
                 {ti("電話番号が入力されていません", "Phone number is required")}
               </span>
             )}
-            {showValidation && !phoneMissing && phoneTooLong && (
+            {showValidation && !phoneMissing && phoneInvalid && (
+              <span className="text-[12px] font-medium text-red-400">
+                {isCustomCountry
+                  ? ti(
+                      "国番号 + を先頭に付けてください (例: +886 9171234567)",
+                      "Start with a + and country code (e.g. +886 9171234567)"
+                    )
+                  : ti(
+                      "+ を含めず番号のみ入力してください。リスト外の国は「Other」を選んでください",
+                      "Don't include +. Pick \"Other\" for countries not listed."
+                    )}
+              </span>
+            )}
+            {showValidation && !phoneMissing && !phoneInvalid && phoneTooLong && (
               <span className="text-[12px] font-medium text-red-400">
                 {ti(
                   `電話番号は国番号を含めて${PHONE_MAX}文字以内にしてください`,
@@ -789,6 +842,14 @@ export function ManualBookingForm({
               )}
               {phoneMissing && (
                 <li>{ti("電話番号", "Phone number")}</li>
+              )}
+              {!phoneMissing && phoneInvalid && (
+                <li>
+                  {ti(
+                    "電話番号の書式 (国番号と + の扱い)",
+                    "Phone format (country code / + usage)"
+                  )}
+                </li>
               )}
               {partySizeMissing && (
                 <li>{ti("人数", "Party size")}</li>

@@ -54,3 +54,4 @@ lh-*.html
 /*.png
 /*.psd
 /*.fig
+/.playwright-mcp/

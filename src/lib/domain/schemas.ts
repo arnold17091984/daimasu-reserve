@@ -42,10 +42,20 @@ const cleanString = (raw: unknown) =>
     ? raw.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim()
     : raw;
 
-/** ITU-T E.164-ish: + then 7-19 digits/spaces/dashes. Cleaned first. */
+/**
+ * ITU-T E.164-ish: optional leading "+" then 7-29 digits/spaces/dashes.
+ * Codex review 2026-05-06: previous regex `[+0-9 ()-]{7,30}` allowed `+`
+ * anywhere, so the admin form's country-code splitter could persist
+ * `+63 +886...` (invalid double-prefix) when an operator typed a full
+ * international number into the local-only input. Anchor `+` to position 0.
+ */
 const phone = z.preprocess(
   cleanString,
-  z.string().min(7).max(30).regex(/^[+0-9 ()-]{7,30}$/, "Invalid phone")
+  z
+    .string()
+    .min(7)
+    .max(30)
+    .regex(/^\+?\d[\d ()-]{5,28}$/, "Invalid phone")
 );
 
 /** RFC 5321 length cap; defer the full RFC 5322 dance to Resend. */
