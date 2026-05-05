@@ -49,22 +49,56 @@ export default async function RevenuePage({
 
   let monthly: RevenueMonthly | null = null;
   let daily: RevenueDaily[] = [];
-  const [{ data: m }, { data: d }] = await Promise.all([
-    sb
-      .from("revenue_monthly")
-      .select("*")
-      .eq("month_start", monthStart)
-      .maybeSingle<RevenueMonthly>(),
-    sb
-      .from("revenue_daily")
-      .select("*")
-      .gte("service_date", monthStart)
-      .lte("service_date", monthEnd)
-      .order("service_date", { ascending: true })
-      .returns<RevenueDaily[]>(),
-  ]);
+  // Receipts breakdown views (added in 0020). Surfaced on this page so
+  // the owner can reconcile BIR monthly OR summary without leaving.
+  // Tolerant of missing views (returns []) — page degrades gracefully
+  // until the migration is applied.
+  interface MethodRow {
+    month_start: string;
+    method: string;
+    receipt_count: number;
+    menu_subtotal_centavos: number;
+    service_charge_centavos: number;
+    vat_centavos: number;
+    grand_total_centavos: number;
+  }
+  interface BreakdownRow {
+    month_start: string;
+    receipt_count: number;
+    menu_subtotal_centavos: number;
+    service_charge_centavos: number;
+    vat_centavos: number;
+    grand_total_centavos: number;
+  }
+  const [{ data: m }, { data: d }, { data: methodSplit }, { data: brk }] =
+    await Promise.all([
+      sb
+        .from("revenue_monthly")
+        .select("*")
+        .eq("month_start", monthStart)
+        .maybeSingle<RevenueMonthly>(),
+      sb
+        .from("revenue_daily")
+        .select("*")
+        .gte("service_date", monthStart)
+        .lte("service_date", monthEnd)
+        .order("service_date", { ascending: true })
+        .returns<RevenueDaily[]>(),
+      sb
+        .from("revenue_method_monthly")
+        .select("*")
+        .eq("month_start", monthStart)
+        .returns<MethodRow[]>(),
+      sb
+        .from("revenue_breakdown_monthly")
+        .select("*")
+        .eq("month_start", monthStart)
+        .maybeSingle<BreakdownRow>(),
+    ]);
   monthly = m;
   daily = d ?? [];
+  const methodRows: MethodRow[] = methodSplit ?? [];
+  const breakdown: BreakdownRow | null = brk;
 
   // Compute avg-check + ensure full-month rows (zero-fill missing days).
   const filledByDate = new Map<string, RevenueDaily>(
@@ -384,6 +418,107 @@ export default async function RevenuePage({
           </table>
         </div>
       </section>
+
+      {/* Receipts breakdown — VAT / SVC / by-method. BIR-friendly section */}
+      {breakdown && breakdown.receipt_count > 0 && (
+        <section className="mt-6 border border-border bg-surface p-4 sm:p-6">
+          <div className="mb-4 flex items-baseline justify-between gap-3">
+            <h2 className="admin-section-label">
+              {ti(lang, "領収書ベースの内訳 (BIR用)", "Receipts breakdown (BIR)")}
+            </h2>
+            <Link
+              href={`/admin/receipts?y=${targetY}&m=${targetM}`}
+              className="text-[11px] font-medium uppercase tracking-[0.10em] text-text-secondary hover:text-gold"
+            >
+              {ti(lang, "OR一覧へ →", "OR list →")}
+            </Link>
+          </div>
+
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat
+              label={ti(lang, "メニュー小計", "Menu subtotal")}
+              value={formatPHP(breakdown.menu_subtotal_centavos, lang)}
+            />
+            <Stat
+              label={ti(lang, "サービス料 10%", "Service 10%")}
+              value={formatPHP(breakdown.service_charge_centavos, lang)}
+            />
+            <Stat
+              label={ti(lang, "VAT 12%", "VAT 12%")}
+              value={formatPHP(breakdown.vat_centavos, lang)}
+            />
+            <Stat
+              label={ti(lang, "総額 (税サ込)", "Grand total")}
+              value={formatPHP(breakdown.grand_total_centavos, lang)}
+              accent
+            />
+          </div>
+
+          {methodRows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">
+                  <tr>
+                    <th className="px-3 py-2 text-left">
+                      {ti(lang, "支払方法", "Method")}
+                    </th>
+                    <th className="px-3 py-2 text-right">
+                      {ti(lang, "件数", "Count")}
+                    </th>
+                    <th className="px-3 py-2 text-right">
+                      {ti(lang, "メニュー", "Menu")}
+                    </th>
+                    <th className="hidden px-3 py-2 text-right md:table-cell">
+                      {ti(lang, "サービス料", "Svc")}
+                    </th>
+                    <th className="hidden px-3 py-2 text-right md:table-cell">
+                      VAT
+                    </th>
+                    <th className="px-3 py-2 text-right">
+                      {ti(lang, "総額", "Total")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {methodRows.map((m) => (
+                    <tr
+                      key={m.method}
+                      className="border-b border-border/40 last:border-b-0"
+                    >
+                      <td className="px-3 py-2.5 font-medium uppercase tracking-[0.06em]">
+                        {m.method}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono admin-num">
+                        {m.receipt_count}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono admin-num">
+                        {formatPHP(m.menu_subtotal_centavos, lang)}
+                      </td>
+                      <td className="hidden px-3 py-2.5 text-right font-mono admin-num text-text-secondary md:table-cell">
+                        {formatPHP(m.service_charge_centavos, lang)}
+                      </td>
+                      <td className="hidden px-3 py-2.5 text-right font-mono admin-num text-text-secondary md:table-cell">
+                        {formatPHP(m.vat_centavos, lang)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono admin-num font-semibold text-gold">
+                        {formatPHP(m.grand_total_centavos, lang)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="mt-3 admin-caption">
+            {ti(
+              lang,
+              `※ 領収書 ${breakdown.receipt_count} 件のうち取消済み除外。VAT / サービス料は精算時にロックされた値です。`,
+              `From ${breakdown.receipt_count} non-voided receipts. VAT / service charge values are locked at settlement time.`
+            )}
+          </p>
+        </section>
+      )}
 
       {monthly && (
         <p className="mt-3 admin-caption">
