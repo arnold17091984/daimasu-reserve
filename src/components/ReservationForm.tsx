@@ -204,10 +204,31 @@ export default function ReservationForm() {
                 "Pick a date, a seating, and party size. A 50% deposit secures your seat; a confirmation email arrives instantly."
               )
             : t(
-                "ご希望の日・時間・人数をお選びください。送信後すぐに確認メールが届き、ご予約が成立いたします。",
-                "Pick a date, a seating, and party size. A confirmation email arrives instantly and your seat is held."
+                "ご希望の日・時間・人数をお選びください。送信後すぐにご予約確定の確認メールが届きます。お支払いはご来店時にカウンターでお願いします (現金 / カード / GCash)。",
+                "Pick a date, a seating, and party size. Your seat is held and a confirmation email arrives instantly — no payment is taken now. Payment (cash / card / GCash) is collected at the counter on arrival."
               )}
         </p>
+        {/* Plain-language summary for guests who haven't experienced
+            kaiseki before. UX 2026-05-06 (foreign guest personas)
+            flagged that "kaiseki" alone wasn't decoded anywhere. */}
+        <div className="mt-4 grid gap-1 border border-gold/30 bg-gold/[0.04] px-4 py-3 text-[13px] leading-relaxed text-text-secondary">
+          <p>
+            <span className="text-gold">
+              {t("懐石とは:", "About kaiseki:")}
+            </span>{" "}
+            {t(
+              "8皿構成の伝統的な日本のフルコース。先付から甘味まで、季節の一品ずつをカウンター越しに料理人がお出ししていく90分の流れです。",
+              "A traditional Japanese tasting menu of 8 small courses — from the opening sakizuke to a sweet finish — served one at a time across the counter over 90 minutes."
+            )}
+          </p>
+          <p>
+            <span className="text-gold">{t("対象:", "Audience:")}</span>{" "}
+            {t(
+              "12歳以上のお客様に限らせていただきます。スマートカジュアル推奨。",
+              "Guests aged 12 and above. Smart casual recommended."
+            )}
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -338,8 +359,36 @@ export default function ReservationForm() {
             })}
           </div>
           <p className="text-[11px] tracking-[0.04em] text-text-muted">
-            {t("※ カウンター8席限定・最大8名まで", "Counter seats up to 8 guests.")}
+            {t("※ カウンター8席限定・最大8名まで・12歳以上", "Counter seats up to 8 guests · age 12+ only.")}
           </p>
+          {/* Live cost estimate — incl. PH 10% service charge + 12% VAT.
+              UX 2026-05-06 (Persona Filipino professional / Western
+              traveller) flagged the previous "tax & service not
+              included" footnote as ambiguous. Surfacing the all-in
+              total here removes booking hesitation. */}
+          {(() => {
+            const n = Number(party) || 0;
+            if (n <= 0) return null;
+            const menu = COURSE_PRICE.amountCentavos * n;
+            const svc = Math.round(menu * 0.1);
+            const vat = Math.round((menu + svc) * 0.12);
+            const grand = menu + svc + vat;
+            const fmt = (c: number) =>
+              new Intl.NumberFormat(lang === "ja" ? "ja-JP" : "en-PH", {
+                style: "currency",
+                currency: "PHP",
+                maximumFractionDigits: 0,
+              }).format(c / 100);
+            return (
+              <p className="text-[12px] leading-relaxed text-text-secondary">
+                {t(
+                  `${n}名様 → コース ${fmt(menu)} + サービス料10% ${fmt(svc)} + VAT 12% ${fmt(vat)} = `,
+                  `${n} guest${n > 1 ? "s" : ""} → course ${fmt(menu)} + service 10% ${fmt(svc)} + VAT 12% ${fmt(vat)} = `
+                )}
+                <span className="font-semibold text-gold">{fmt(grand)}</span>
+              </p>
+            );
+          })()}
         </div>
 
         {/* Step 4 — Contact */}

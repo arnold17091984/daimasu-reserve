@@ -250,6 +250,7 @@ export const MAIN_SITE_URL = "https://daimasu.com.ph";
 
 export const COURSE_PRICE = {
   amount: "₱8,000",
+  amountCentavos: 800_000,
   note: { ja: "お一人様 / 税・サ別", en: "per guest / tax & service not included" },
 };
 

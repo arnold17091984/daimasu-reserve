@@ -197,10 +197,29 @@ function dietaryBlock(r: Reservation, lang: "ja" | "en"): string {
 }
 
 function summaryTable(r: Reservation, lang: "ja" | "en"): string {
+  // Deposit-free mode (no Stripe charge taken at booking) — drop the
+  // "Deposit" row (always ₱0) and rename Balance to "Total on arrival"
+  // so the guest understands that no payment was taken yet. UX 2026-05-06
+  // (Persona Western traveller) flagged the previous wording as ambiguous.
+  const depositFree = r.deposit_centavos === 0;
   const labels =
     lang === "ja"
-      ? { name: "お名前", date: "ご来店日時", party: "人数", course: "コース", deposit: "デポジット", balance: "当日お支払い" }
-      : { name: "Name", date: "Date / time", party: "Party", course: "Course", deposit: "Deposit (paid)", balance: "Balance on arrival" };
+      ? {
+          name: "お名前",
+          date: "ご来店日時",
+          party: "人数",
+          course: "コース",
+          deposit: "デポジット (お支払い済)",
+          balance: depositFree ? "当日お支払い (合計)" : "当日お支払い",
+        }
+      : {
+          name: "Name",
+          date: "Date / time",
+          party: "Party",
+          course: "Course",
+          deposit: "Deposit (paid)",
+          balance: depositFree ? "Total on arrival" : "Balance on arrival",
+        };
 
   const row = (k: string, v: string) =>
     `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;letter-spacing:0.04em;">${k}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${v}</td></tr>`;
@@ -210,7 +229,7 @@ function summaryTable(r: Reservation, lang: "ja" | "en"): string {
     ${row(labels.date, dateLine(r, lang))}
     ${row(labels.party, `${r.party_size}`)}
     ${row(labels.course, formatPHP(r.course_price_centavos, lang))}
-    ${row(labels.deposit, formatPHP(r.deposit_centavos, lang))}
+    ${depositFree ? "" : row(labels.deposit, formatPHP(r.deposit_centavos, lang))}
     ${row(labels.balance, formatPHP(r.balance_centavos, lang))}
   </table>`;
 }
