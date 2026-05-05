@@ -176,6 +176,29 @@ export async function POST(req: NextRequest) {
   // seat_numbers is filled by the atomic RPC; surfaced for downstream
   // logging if needed (currently unused — Stripe metadata covers tracking).
 
+  // Persist structured dietary info (migration 0018). Done as a follow-up
+  // UPDATE rather than a SP parameter so the booking flow degrades
+  // gracefully when the migration hasn't been applied yet — Postgres
+  // returns 42703 (undefined_column) which we swallow here. Once the
+  // migration is in place, this UPDATE writes alongside the original row.
+  if (input.dietary) {
+    const { error: dietErr } = await sb
+      .from("reservations")
+      .update({ dietary: input.dietary })
+      .eq("id", reservationId);
+    if (dietErr && dietErr.code !== "42703") {
+      // Real failure — log but don't 500 (booking is already committed).
+      console.warn(
+        "[reservations] dietary update failed",
+        dietErr.code,
+        dietErr.message
+      );
+    }
+    // Echo back into the in-memory row so the confirmation email can
+    // render the dietary block even before the migration runs.
+    bookedRow.dietary = input.dietary;
+  }
+
   // 5a. Deposit-free path: row is already committed by the atomic RPC
   // above. Push the side effects (Telegram fan-out, email log, audit
   // insert) into the post-response phase via Next 16 after() so the

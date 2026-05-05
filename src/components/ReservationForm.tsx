@@ -79,6 +79,17 @@ export default function ReservationForm() {
   const [seating, setSeating] = useState<"s1" | "s2">("s1");
   const [party, setParty] = useState("2");
   const [notes, setNotes] = useState("");
+  // Dietary info — separated from `notes` so the kitchen can read it at
+  // a glance and the confirmation email can echo it back to reassure
+  // guests with severe allergies. UX 2026-05-06 (Persona shellfish-allergic
+  // Western traveller) flagged the previous free-text-only design as a
+  // safety risk.
+  const [dietaryType, setDietaryType] = useState<
+    "none" | "vegetarian" | "pescatarian" | "halal" | "kosher" | "gluten_free" | "dairy_free" | "other"
+  >("none");
+  const [allergens, setAllergens] = useState("");
+  const [allergySevere, setAllergySevere] = useState(false);
+  const [dietaryInstructions, setDietaryInstructions] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [website, setWebsite] = useState(""); // honeypot
@@ -121,6 +132,18 @@ export default function ReservationForm() {
           guest_phone: phone.trim(),
           guest_lang: lang,
           notes: notes.trim() || null,
+          dietary:
+            dietaryType !== "none" ||
+            allergens.trim() ||
+            allergySevere ||
+            dietaryInstructions.trim()
+              ? {
+                  type: dietaryType,
+                  allergens: allergens.trim(),
+                  severe: allergySevere,
+                  instructions: dietaryInstructions.trim(),
+                }
+              : null,
           website,
         }),
       });
@@ -376,6 +399,91 @@ export default function ReservationForm() {
           />
         </div>
 
+        {/* Dietary restrictions — structured (separate from free-text notes
+            so the kitchen sees it at a glance and the confirmation email
+            can echo it back). UX 2026-05-06. */}
+        <div className="flex flex-col gap-3 border border-border bg-surface/30 p-4">
+          <p className={labelClass}>
+            {t("食物アレルギー・食事制限 (任意)", "Dietary restrictions (optional)")}
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="res-dietary-type" className="text-[12px] text-text-secondary">
+              {t("食事タイプ", "Dietary type")}
+            </label>
+            <select
+              id="res-dietary-type"
+              value={dietaryType}
+              onChange={(e) =>
+                setDietaryType(e.target.value as typeof dietaryType)
+              }
+              className={inputClass}
+            >
+              <option value="none">{t("特になし", "None")}</option>
+              <option value="vegetarian">{t("ベジタリアン", "Vegetarian")}</option>
+              <option value="pescatarian">{t("ペスカタリアン (魚はOK)", "Pescatarian")}</option>
+              <option value="halal">{t("ハラール", "Halal")}</option>
+              <option value="kosher">{t("コーシャー", "Kosher")}</option>
+              <option value="gluten_free">{t("グルテンフリー", "Gluten-free")}</option>
+              <option value="dairy_free">{t("乳製品不可", "Dairy-free")}</option>
+              <option value="other">{t("その他", "Other")}</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="res-allergens" className="text-[12px] text-text-secondary">
+              {t("アレルギー (具体的にご記入ください)", "Specific allergens")}
+            </label>
+            <input
+              id="res-allergens"
+              type="text"
+              value={allergens}
+              onChange={(e) => setAllergens(e.target.value)}
+              maxLength={140}
+              className={inputClass}
+              placeholder={
+                lang === "ja"
+                  ? "例: 甲殻類, 落花生, 蕎麦"
+                  : "e.g. shellfish, peanuts, buckwheat"
+              }
+            />
+          </div>
+
+          <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+            <input
+              type="checkbox"
+              checked={allergySevere}
+              onChange={(e) => setAllergySevere(e.target.checked)}
+              className="mt-0.5 accent-gold"
+            />
+            <span>
+              {t(
+                "重度のアレルギー (アナフィラキシー / 病院搬送リスク)。スタッフが事前確認のためご連絡することがあります。",
+                "Severe allergy (anaphylaxis / hospital risk). Our staff may contact you to confirm before service."
+              )}
+            </span>
+          </label>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="res-dietary-instructions" className="text-[12px] text-text-secondary">
+              {t("補足 (調理スタッフに伝えたいこと)", "Additional instructions for the kitchen")}
+            </label>
+            <textarea
+              id="res-dietary-instructions"
+              value={dietaryInstructions}
+              onChange={(e) => setDietaryInstructions(e.target.value)}
+              rows={2}
+              maxLength={280}
+              className={`${inputClass} resize-none`}
+              placeholder={
+                lang === "ja"
+                  ? "例: 出汁の魚も不可 / ドレッシングは別添えで"
+                  : "e.g. no fish-based dashi / dressing on the side"
+              }
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col gap-2">
           <label htmlFor="res-notes" className={labelClass}>
             {t("備考 (任意)", "Notes (optional)")}
@@ -388,8 +496,8 @@ export default function ReservationForm() {
             className={`${inputClass} resize-none`}
             placeholder={
               lang === "ja"
-                ? "アレルギー・記念日・車椅子利用など"
-                : "Allergies, anniversary, wheelchair access, etc."
+                ? "記念日・車椅子利用・座席のご希望など"
+                : "Anniversary, wheelchair access, seating preference, etc."
             }
           />
         </div>

@@ -53,6 +53,31 @@ export interface RestaurantSettings {
   updated_at: string;
 }
 
+export type DietaryType =
+  | "none"
+  | "vegetarian"
+  | "pescatarian"
+  | "halal"
+  | "kosher"
+  | "gluten_free"
+  | "dairy_free"
+  | "other";
+
+export interface DietaryInfo {
+  /** Coarse category — drives default kitchen substitutions. */
+  type: DietaryType;
+  /** Free-text list of specific allergens (e.g. "shellfish, peanuts"). */
+  allergens: string;
+  /**
+   * True when the allergen would cause anaphylaxis / hospital risk.
+   * Highlights the booking in red on the kitchen prep sheet so it is
+   * visible at-a-glance during service.
+   */
+  severe: boolean;
+  /** Additional kitchen instructions, e.g. "no fish-based dashi". */
+  instructions: string;
+}
+
 export interface Reservation {
   id: string;
   service_date: string; // 'YYYY-MM-DD'
@@ -64,6 +89,14 @@ export interface Reservation {
   guest_phone: string;
   guest_lang: "ja" | "en";
   notes: string | null;
+  /**
+   * Structured dietary information (allergens / vegetarian / etc.). NULL
+   * for guests with no dietary requirement. Surfaced separately from the
+   * free-text `notes` so the kitchen can be alerted at-a-glance and the
+   * confirmation email can echo the restriction back to the guest. Added
+   * 2026-05-06 — see migration 0018_dietary.sql.
+   */
+  dietary: DietaryInfo | null;
   course_price_centavos: number;
   deposit_pct: number;
   total_centavos: number;

@@ -371,6 +371,33 @@ function SeatingBlock({
                     {b.guest_lang}
                   </td>
                   <td className="px-2 py-3 text-[13px] leading-snug">
+                    {b.dietary &&
+                      (b.dietary.type !== "none" ||
+                        b.dietary.allergens ||
+                        b.dietary.severe ||
+                        b.dietary.instructions) && (
+                        <div
+                          className={
+                            b.dietary.severe
+                              ? "mb-1 flex flex-col gap-0.5 border-2 border-red-500/70 bg-red-500/10 px-1.5 py-1 text-[11px] font-bold text-red-400 print:border-black print:bg-transparent print:text-black"
+                              : "mb-1 flex flex-col gap-0.5 border border-gold/60 bg-gold/10 px-1.5 py-1 text-[11px] font-semibold text-gold print:border-black print:bg-transparent print:text-black"
+                          }
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {b.dietary.severe ? "⚠ SEVERE" : "DIET"}
+                            <span>
+                              {b.dietary.type !== "none" && b.dietary.type}
+                              {b.dietary.type !== "none" && b.dietary.allergens && " · "}
+                              {b.dietary.allergens}
+                            </span>
+                          </span>
+                          {b.dietary.instructions && (
+                            <span className="font-normal italic">
+                              {b.dietary.instructions}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     {b.celebration && (
                       <div className="mb-1 inline-flex items-start gap-1 border border-gold/60 bg-gold/10 px-1.5 py-0.5 text-[11px] font-semibold text-gold print:border-black print:bg-transparent print:text-black">
                         <Sparkles size={11} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -382,7 +409,7 @@ function SeatingBlock({
                         <span className="text-gold/80 print:text-black">●</span>
                         <span className="whitespace-pre-line">{b.notes}</span>
                       </span>
-                    ) : !b.celebration ? (
+                    ) : !b.celebration && !b.dietary ? (
                       <span className="text-text-muted print:text-black/40">—</span>
                     ) : null}
                   </td>

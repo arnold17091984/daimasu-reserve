@@ -342,6 +342,60 @@ export default async function ReservationDetailPage({
               </>
             );
           })()}
+          {reservation.dietary &&
+            (reservation.dietary.type !== "none" ||
+              reservation.dietary.allergens ||
+              reservation.dietary.severe ||
+              reservation.dietary.instructions) && (
+              <div
+                className={
+                  reservation.dietary.severe
+                    ? "mt-4 border-t-2 border-red-500/60 bg-red-500/[0.06] px-3 py-3"
+                    : "mt-4 border-t border-gold/40 bg-gold/[0.04] px-3 py-3"
+                }
+              >
+                <p
+                  className={
+                    reservation.dietary.severe
+                      ? "text-[11px] font-bold uppercase tracking-[0.14em] text-red-400"
+                      : "text-[11px] font-medium uppercase tracking-[0.14em] text-gold"
+                  }
+                >
+                  {ti(lang, "食事制限・アレルギー", "Dietary / allergens")}
+                  {reservation.dietary.severe && (
+                    <span className="ml-2 rounded-sm bg-red-500/80 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.10em] text-white">
+                      {ti(lang, "重度", "SEVERE")}
+                    </span>
+                  )}
+                </p>
+                <ul className="mt-1.5 space-y-0.5 text-sm text-foreground">
+                  {reservation.dietary.type !== "none" && (
+                    <li>
+                      <span className="text-text-secondary">
+                        {ti(lang, "種別: ", "Type: ")}
+                      </span>
+                      {reservation.dietary.type}
+                    </li>
+                  )}
+                  {reservation.dietary.allergens && (
+                    <li>
+                      <span className="text-text-secondary">
+                        {ti(lang, "アレルギー: ", "Allergens: ")}
+                      </span>
+                      {reservation.dietary.allergens}
+                    </li>
+                  )}
+                  {reservation.dietary.instructions && (
+                    <li>
+                      <span className="text-text-secondary">
+                        {ti(lang, "指示: ", "Instructions: ")}
+                      </span>
+                      {reservation.dietary.instructions}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
           {reservation.notes && (
             <div className="mt-4 border-t border-border pt-3">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-text-secondary">

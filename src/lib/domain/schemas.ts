@@ -82,6 +82,28 @@ export const createReservationSchema = z.object({
     (raw) => (raw == null ? null : cleanString(raw)),
     z.string().max(280).nullable().optional()
   ),
+  // Structured dietary info — null when guest has no restriction.
+  // Migration 0018_dietary.sql adds the column; if not yet applied, the
+  // route handler silently drops this from the insert payload (see
+  // /api/reservations route, defensive `dietary` handling).
+  dietary: z
+    .object({
+      type: z.enum([
+        "none",
+        "vegetarian",
+        "pescatarian",
+        "halal",
+        "kosher",
+        "gluten_free",
+        "dairy_free",
+        "other",
+      ]),
+      allergens: z.preprocess(cleanString, z.string().max(140)),
+      severe: z.boolean(),
+      instructions: z.preprocess(cleanString, z.string().max(280)),
+    })
+    .nullable()
+    .optional(),
   // Honeypot — the booking UI ships an always-hidden field. Bots fill it.
   // E2E test 2026-05-02: previously this was `z.string().max(0)`, which
   // returned 400 "validation: too_big" when bots filled the field — telling

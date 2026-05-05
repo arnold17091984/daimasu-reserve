@@ -118,6 +118,84 @@ function venueBlock(lang: "ja" | "en"): string {
   </div>`;
 }
 
+/**
+ * Render structured dietary info if present. Echoes the guest's allergy
+ * declaration back so they have written confirmation that the kitchen
+ * received it — UX 2026-05-06 flagged the previous silent acceptance as
+ * a safety risk for severe allergies. Returns "" when no dietary info.
+ */
+function dietaryBlock(r: Reservation, lang: "ja" | "en"): string {
+  const d = r.dietary;
+  if (!d) return "";
+  // Skip the block if the guest only set type=none and no allergens —
+  // the field was technically filled but holds no real information.
+  if (d.type === "none" && !d.allergens && !d.severe && !d.instructions) {
+    return "";
+  }
+
+  const heading = lang === "ja" ? "お食事制限を承りました" : "Dietary requirements received";
+  const labelType = lang === "ja" ? "種別" : "Type";
+  const labelAllergens = lang === "ja" ? "アレルギー" : "Allergens";
+  const labelInstructions = lang === "ja" ? "ご指示" : "Instructions";
+
+  const TYPE_JA: Record<string, string> = {
+    none: "なし",
+    vegetarian: "ベジタリアン",
+    pescatarian: "ペスカタリアン",
+    halal: "ハラール",
+    kosher: "コーシャー",
+    gluten_free: "グルテンフリー",
+    dairy_free: "乳製品不可",
+    other: "その他",
+  };
+  const TYPE_EN: Record<string, string> = {
+    none: "None",
+    vegetarian: "Vegetarian",
+    pescatarian: "Pescatarian",
+    halal: "Halal",
+    kosher: "Kosher",
+    gluten_free: "Gluten-free",
+    dairy_free: "Dairy-free",
+    other: "Other",
+  };
+  const typeLabel = (lang === "ja" ? TYPE_JA : TYPE_EN)[d.type] ?? d.type;
+
+  const severeBadge = d.severe
+    ? `<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#7a1e1e;color:#fff;font-size:11px;letter-spacing:0.10em;border-radius:2px;">${lang === "ja" ? "重度" : "SEVERE"}</span>`
+    : "";
+
+  const rows: string[] = [];
+  if (d.type !== "none") {
+    rows.push(
+      `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;">${labelType}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${escapeHtml(typeLabel)}${severeBadge}</td></tr>`
+    );
+  }
+  if (d.allergens) {
+    rows.push(
+      `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;">${labelAllergens}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${escapeHtml(d.allergens)}${d.type === "none" ? severeBadge : ""}</td></tr>`
+    );
+  }
+  if (d.instructions) {
+    rows.push(
+      `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;">${labelInstructions}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${escapeHtml(d.instructions)}</td></tr>`
+    );
+  }
+
+  const reassurance = d.severe
+    ? lang === "ja"
+      ? "重度のアレルギーとして承りました。サービス前にスタッフよりご確認のご連絡を差し上げる場合がございます。"
+      : "We've recorded this as a severe allergy. Our staff may contact you before service to confirm the details."
+    : lang === "ja"
+      ? "厨房で確認しております。当日もスタッフまでお気軽にお声がけください。"
+      : "Our kitchen has been notified. Feel free to mention it again on arrival.";
+
+  return `<div style="margin:16px 0 0;padding:16px;border:1px solid ${d.severe ? "#7a1e1e" : PALETTE.border};${d.severe ? "background:rgba(122,30,30,0.08);" : ""}">
+    <div style="font-size:11px;letter-spacing:0.18em;color:${PALETTE.goldSoft};text-transform:uppercase;margin-bottom:8px;">${heading}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join("")}</table>
+    <p style="margin:12px 0 0;font-size:12px;color:${PALETTE.textMuted};line-height:1.6;">${reassurance}</p>
+  </div>`;
+}
+
 function summaryTable(r: Reservation, lang: "ja" | "en"): string {
   const labels =
     lang === "ja"
@@ -174,7 +252,12 @@ export function renderConfirmEmail(args: ConfirmArgs): { subject: string; html: 
     subject,
     html: shell(
       subject,
-      greeting + summaryTable(r, lang) + venueBlock(lang) + policy + cancelButton,
+      greeting +
+        summaryTable(r, lang) +
+        dietaryBlock(r, lang) +
+        venueBlock(lang) +
+        policy +
+        cancelButton,
       lang
     ),
   };
@@ -249,6 +332,11 @@ export function renderTelegramConfirm(r: Reservation): string {
     `<b>When</b>: ${d}`,
     `<b>Party</b>: ${r.party_size}`,
     `<b>Notes</b>: ${escapeHtml(r.notes ?? "—")}`,
+    ...(r.dietary
+      ? [
+          `<b>Dietary</b>: ${escapeHtml(r.dietary.type)}${r.dietary.severe ? " ⚠️ SEVERE" : ""}${r.dietary.allergens ? ` — ${escapeHtml(r.dietary.allergens)}` : ""}${r.dietary.instructions ? ` (${escapeHtml(r.dietary.instructions)})` : ""}`,
+        ]
+      : []),
     `<b>Deposit</b>: ${formatPHP(r.deposit_centavos)} (paid)`,
     `<b>Balance</b>: ${formatPHP(r.balance_centavos)} (on arrival)`,
     "━━━━━━━━━━━━━━━━━━━━━",
