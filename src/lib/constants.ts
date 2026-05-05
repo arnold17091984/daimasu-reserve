@@ -397,4 +397,24 @@ export const FAQ_ITEMS: FaqItem[] = [
       en: "Reservation only. Due to limited seating, advance booking is required.",
     },
   },
+  {
+    q: {
+      ja: "遅刻しそうな場合は？",
+      en: "What if I'm running late?",
+    },
+    a: {
+      ja: "全体で90分の構成のため、ご予約時刻から15分を過ぎますと、お料理・映像演出の流れが他のお客様にも影響いたします。EDSAの渋滞などで遅れそうな場合は、できるだけ早く電話 (0917 109 6032) または WhatsApp までご連絡ください。15分以上連絡なくご来店いただけない場合は、no-show 扱いとなる場合がございます。",
+      en: "The 90-minute course is choreographed with the other guests at the counter, so arrivals 15+ minutes after the seating start can disrupt service. If Manila traffic is delaying you, please call (0917 109 6032) or WhatsApp us as soon as possible. Without contact, arrivals more than 15 minutes late may be recorded as no-shows.",
+    },
+  },
+  {
+    q: {
+      ja: "支払い方法は？",
+      en: "What payment methods do you accept?",
+    },
+    a: {
+      ja: "現金、クレジットカード (Visa / Mastercard / JCB / AMEX) を承ります。GCash も可能です。フィリピン国外発行のカードもご利用いただけます。",
+      en: "We accept cash, credit cards (Visa / Mastercard / JCB / AMEX), and GCash. Internationally-issued cards are accepted at the counter.",
+    },
+  },
 ];

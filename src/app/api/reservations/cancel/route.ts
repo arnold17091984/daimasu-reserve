@@ -154,6 +154,11 @@ export async function POST(req: NextRequest) {
         deposit_centavos: reservation.deposit_centavos,
         deposit_display: formatPHP(reservation.deposit_centavos, reservation.guest_lang),
         starts_at: reservation.service_starts_at,
+        // Returned so the /cancel page can render the tier-policy explanation
+        // and the cancellation-complete message in the guest's language. Was
+        // missing — UX 2026-05-06 (Persona Western traveller) flagged the
+        // explanation as Japanese-only and unreadable for non-JP guests.
+        guest_lang: reservation.guest_lang,
       },
     });
   }

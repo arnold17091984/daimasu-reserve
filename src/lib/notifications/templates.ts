@@ -7,6 +7,7 @@
  */
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 import { formatPHP } from "@/lib/domain/reservation";
+import { CONTACT } from "@/lib/constants";
 
 interface ConfirmArgs {
   reservation: Reservation;
@@ -79,6 +80,44 @@ function dateLine(reservation: Reservation, lang: "ja" | "en"): string {
   return fmt;
 }
 
+/**
+ * Address + map + phone block injected into confirmation & reminder
+ * emails. Was missing entirely before — guests had to revisit the site
+ * to look up where the bar is and how to reach the staff. UX research
+ * 2026-05-06 (Persona A: Tokyo tourist, Persona B: Western traveller)
+ * flagged this as the single most acute pre-arrival friction.
+ *
+ * The block also carries the late-arrival contact line so guests in
+ * Manila traffic know whom to call without hunting through the site.
+ */
+function venueBlock(lang: "ja" | "en"): string {
+  const heading =
+    lang === "ja" ? "ご来店場所・アクセス" : "Where to find us";
+  const lateLabel =
+    lang === "ja"
+      ? "渋滞・遅延の連絡先 (お電話 / WhatsApp 24h)"
+      : "If running late (call or WhatsApp 24h)";
+  const mapLabel = lang === "ja" ? "Google マップで開く" : "Open in Google Maps";
+  const callLabel = lang === "ja" ? "電話" : "Call";
+  const waLabel = "WhatsApp";
+
+  return `<div style="margin:24px 0 0;padding:16px;border:1px solid ${PALETTE.border};">
+    <div style="font-size:11px;letter-spacing:0.18em;color:${PALETTE.goldSoft};text-transform:uppercase;margin-bottom:8px;">${heading}</div>
+    <p style="margin:0 0 6px;font-size:13px;line-height:1.6;color:${PALETTE.text};">
+      ${escapeHtml(CONTACT.address.full[lang])}
+    </p>
+    <p style="margin:0 0 12px;">
+      <a href="${CONTACT.mapLinkUrl}" style="color:${PALETTE.goldSoft};text-decoration:underline;font-size:13px;">${mapLabel} →</a>
+    </p>
+    <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.10em;color:${PALETTE.textMuted};text-transform:uppercase;">${lateLabel}</p>
+    <p style="margin:0;font-size:13px;line-height:1.6;">
+      <a href="tel:${CONTACT.phone.mobile.tel}" style="color:${PALETTE.goldSoft};text-decoration:none;">${callLabel}: ${CONTACT.phone.mobile.label}</a>
+      &nbsp;·&nbsp;
+      <a href="${CONTACT.whatsapp.href}" style="color:${PALETTE.goldSoft};text-decoration:none;">${waLabel}: ${CONTACT.whatsapp.label}</a>
+    </p>
+  </div>`;
+}
+
 function summaryTable(r: Reservation, lang: "ja" | "en"): string {
   const labels =
     lang === "ja"
@@ -133,7 +172,11 @@ export function renderConfirmEmail(args: ConfirmArgs): { subject: string; html: 
 
   return {
     subject,
-    html: shell(subject, greeting + summaryTable(r, lang) + policy + cancelButton, lang),
+    html: shell(
+      subject,
+      greeting + summaryTable(r, lang) + venueBlock(lang) + policy + cancelButton,
+      lang
+    ),
   };
 }
 
@@ -175,6 +218,7 @@ export function renderReminderEmail(args: ReminderArgs): { subject: string; html
     <p style="margin:0 0 16px;font-size:13px;color:${PALETTE.textMuted};">${escapeHtml(r.guest_name)} 様</p>
     <p style="margin:0 0 8px;font-size:14px;line-height:1.7;">${lang === "ja" ? "ご予約のお時間が近づいております。下記をご確認ください。" : "Your reservation is approaching. Please confirm the details below."}</p>
     ${summaryTable(r, lang)}
+    ${venueBlock(lang)}
     <p style="margin:16px 0 0;font-size:12px;color:${PALETTE.textMuted};line-height:1.7;">${lang === "ja" ? "ご都合が変わった場合は、ご予約確認メール内のキャンセルリンクをご利用ください。" : "If your plans change, please use the cancel link in your original booking confirmation email."}</p>`;
 
   return { subject, html: shell(subject, body, lang) };
