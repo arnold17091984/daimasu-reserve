@@ -91,7 +91,7 @@ export default async function TodayServiceSheetPage({
       const count = priorRows.filter(
         (p) => p.guest_phone === b.guest_phone || p.guest_email === b.guest_email
       ).length;
-      repeatMap.set(b.guest_phone || b.guest_email, count);
+      repeatMap.set(b.guest_phone ?? b.guest_email, count);
     }
   }
 
@@ -331,7 +331,7 @@ function SeatingBlock({
           </thead>
           <tbody>
             {bookings.map((b, i) => {
-              const repeats = repeatMap.get(b.guest_phone || b.guest_email) ?? 0;
+              const repeats = repeatMap.get(b.guest_phone ?? b.guest_email) ?? 0;
               return (
                 <tr
                   key={b.id}

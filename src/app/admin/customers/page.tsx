@@ -23,7 +23,10 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 50;
 
 interface CustomerRow {
+  /** Walk-ins may have no phone — store empty string for stable React keys. */
   guest_phone: string;
+  /** Stable dedup key: phone if present, else email, else a synthetic id. */
+  dedup_key: string;
   guest_name: string;
   guest_email: string;
   visit_count: number;
@@ -72,7 +75,8 @@ export default async function CustomersPage({
       !!r.celebration && r.celebration.occasion !== "none";
     if (!cur) {
       grouped.set(key, {
-        guest_phone: r.guest_phone,
+        dedup_key: key,
+        guest_phone: r.guest_phone ?? "",
         guest_name: r.guest_name,
         guest_email: r.guest_email,
         guest_lang: r.guest_lang,
@@ -123,7 +127,7 @@ export default async function CustomersPage({
     customers = customers.filter(
       (c) =>
         c.guest_name.toLowerCase().includes(needle) ||
-        c.guest_phone.toLowerCase().includes(needle) ||
+        (c.guest_phone || "").toLowerCase().includes(needle) ||
         c.guest_email.toLowerCase().includes(needle)
     );
   }
@@ -222,7 +226,7 @@ export default async function CustomersPage({
               <tbody>
                 {paged.map((c) => (
                   <tr
-                    key={c.guest_phone}
+                    key={c.dedup_key}
                     className="border-b border-border/40 last:border-b-0 hover:bg-card"
                   >
                     <td className="px-3 py-3">
@@ -252,7 +256,11 @@ export default async function CustomersPage({
                         )}
                       </div>
                       <div className="admin-caption mt-0.5">
-                        {c.guest_phone}
+                        {c.guest_phone || (
+                          <span className="text-text-muted">
+                            {ti(lang, "電話なし", "no phone")}
+                          </span>
+                        )}
                         {c.guest_email && !c.guest_email.endsWith("@daimasu.local") && (
                           <span> · {c.guest_email}</span>
                         )}

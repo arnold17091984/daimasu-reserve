@@ -218,7 +218,13 @@ export const adminCreateReservationSchema = z.object({
     (raw) => (typeof raw === "string" ? raw.trim().toLowerCase() : raw),
     z.union([z.string().email().max(254), z.literal("")])
   ),
-  guest_phone: phone,
+  // Walk-ins / phone bookings may have no phone (hotel business card,
+  // tourist with no local SIM). Treat empty string as null. Online
+  // public form keeps `phone` (required). See migration 0019.
+  guest_phone: z.preprocess(
+    (raw) => (typeof raw === "string" && raw.trim() === "" ? null : raw),
+    phone.nullable()
+  ),
   guest_lang: z.enum(["ja", "en"]).default("en"),
   notes: z.preprocess(
     (raw) => (raw == null ? null : cleanString(raw)),

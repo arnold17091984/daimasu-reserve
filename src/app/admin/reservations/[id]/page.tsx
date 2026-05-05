@@ -276,7 +276,7 @@ export default async function ReservationDetailPage({
           />
           <DataRow
             label={ti(lang, "電話", "Phone")}
-            value={reservation.guest_phone}
+            value={reservation.guest_phone ?? "—"}
           />
           <DataRow
             label={ti(lang, "メール", "Email")}

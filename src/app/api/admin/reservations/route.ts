@@ -95,7 +95,11 @@ export async function POST(req: NextRequest) {
       p_guest_name: input.guest_name,
       p_guest_email:
         input.guest_email || `manual-${reservationId.slice(0, 8)}@daimasu.local`,
-      p_guest_phone: input.guest_phone,
+      // Pass through null untouched — migration 0019 made the column
+      // nullable for the walk-in path. The column-NOT-NULL still applies
+      // until the migration runs; the SP would surface the constraint
+      // violation in that case which the route handler returns as 500.
+      p_guest_phone: input.guest_phone ?? null,
       p_guest_lang: input.guest_lang,
       p_notes: input.notes ?? null,
       p_course_price_centavos: settings.course_price_centavos,

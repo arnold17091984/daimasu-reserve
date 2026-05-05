@@ -164,7 +164,11 @@ export function ManualBookingForm({
     ? trimmedPhoneLocal
     : `${countryCode} ${trimmedPhoneLocal}`.trim();
   const nameMissing = trimmedName.length === 0;
-  const phoneMissing = phoneDigits.length === 0;
+  // Phone is optional for walk-ins (a tourist with only a hotel card
+  // and no local SIM is a real recurring scenario). Online public
+  // bookings still require it — this is the admin path only.
+  const phoneOptional = source === "walkin" || source === "staff";
+  const phoneMissing = !phoneOptional && phoneDigits.length === 0;
   // In custom-country mode the operator must type the leading "+". In
   // listed-country mode "+" anywhere in the local input is invalid (the
   // server regex rejects it; refuse on the client too with a clear message).
@@ -234,7 +238,12 @@ export function ManualBookingForm({
           party_size: partySize,
           guest_name: name,
           guest_email: email,
-          guest_phone: fullPhone,
+          // Walk-ins / staff entries can omit phone (migration 0019 +
+          // schema null path). When empty in those modes, send null so
+          // the schema treats the field as absent rather than rejecting
+          // a "+63" stub on the regex.
+          guest_phone:
+            phoneOptional && phoneDigits.length === 0 ? null : fullPhone,
           guest_lang: guestLang,
           notes: notes.trim() || null,
           source,
@@ -613,7 +622,13 @@ export function ManualBookingForm({
               </span>
             )}
           </Field>
-          <Field label={ti("電話番号 *", "Phone *")}>
+          <Field
+            label={
+              phoneOptional
+                ? ti("電話番号 (任意)", "Phone (optional)")
+                : ti("電話番号 *", "Phone *")
+            }
+          >
             <div className="grid grid-cols-[110px_1fr] gap-2">
               <select
                 value={countryCode}
@@ -648,7 +663,7 @@ export function ManualBookingForm({
                       : ti("番号を入力", "Phone number")
                 }
                 maxLength={phoneLocalMaxLength}
-                required
+                required={!phoneOptional}
                 className={inputCls}
               />
             </div>

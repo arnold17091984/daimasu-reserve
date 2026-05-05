@@ -107,7 +107,15 @@ export async function POST(req: NextRequest) {
 
       let whatsappDelivered = false;
       let lastWaError: string | null = null;
-      if (settings.whatsapp_from_number && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN) {
+      // Skip WhatsApp entirely when the booking has no phone (walk-in
+       // entered without one — migration 0019). Email reminders still go
+       // out for those guests.
+      if (
+        r.guest_phone &&
+        settings.whatsapp_from_number &&
+        env.TWILIO_ACCOUNT_SID &&
+        env.TWILIO_AUTH_TOKEN
+      ) {
         try {
           const body =
             r.guest_lang === "ja"

@@ -327,7 +327,7 @@ export function renderTelegramConfirm(r: Reservation): string {
     "<b>🥢 New reservation confirmed</b>",
     "━━━━━━━━━━━━━━━━━━━━━",
     `<b>Name</b>: ${escapeHtml(r.guest_name)}`,
-    `<b>Phone</b>: ${escapeHtml(r.guest_phone)}`,
+    `<b>Phone</b>: ${r.guest_phone ? escapeHtml(r.guest_phone) : "—"}`,
     `<b>Email</b>: ${escapeHtml(r.guest_email)}`,
     `<b>When</b>: ${d}`,
     `<b>Party</b>: ${r.party_size}`,

@@ -86,7 +86,13 @@ export interface Reservation {
   party_size: number;
   guest_name: string;
   guest_email: string;
-  guest_phone: string;
+  /**
+   * Walk-ins / phone bookings can be entered without a phone (the guest
+   * may only have a hotel business card). Online bookings still require
+   * one. Migration 0019_walkin_phone_optional.sql relaxes the column
+   * constraint; the API boundary keeps the public form strict.
+   */
+  guest_phone: string | null;
   guest_lang: "ja" | "en";
   notes: string | null;
   /**
