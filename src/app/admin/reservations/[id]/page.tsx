@@ -25,6 +25,7 @@ import type {
 import { SettleForm } from "./settle-form";
 import { NoShowButton } from "./no-show-button";
 import { CancelWithRefundForm } from "./cancel-form";
+import { ResendConfirmButton } from "./resend-button";
 import { CelebrationReview } from "../../_components/celebration-display";
 
 export const runtime = "nodejs";
@@ -420,6 +421,12 @@ export default async function ReservationDetailPage({
               </div>
               <div className="border-t border-border pt-6">
                 <CancelWithRefundForm reservation={reservation} lang={lang} />
+              </div>
+              <div className="border-t border-border pt-6">
+                <ResendConfirmButton
+                  reservationId={reservation.id}
+                  lang={lang}
+                />
               </div>
             </div>
           ) : reservation.status === "completed" ? (

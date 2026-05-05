@@ -135,7 +135,19 @@ export default async function AdminDashboardPage() {
     const hoursOut = (new Date(r.service_starts_at).getTime() - nowMs) / 3_600_000;
     return r.status === "confirmed" && hoursOut < 24 && hoursOut > 2 && !r.reminder_long_sent_at;
   });
-  const systemNoShows: Reservation[] = []; // would query in real mode
+  // Confirmed reservations whose service ended ≥30 min ago and were
+  // never settled or marked no-show. The /api/cron/mark-no-show route
+  // sweeps these on a schedule, but the dashboard surfaces them
+  // immediately so the operator can act before the cron fires (or
+  // manually retry when the cron fails). UX 2026-05-06 (operations
+  // review M4) flagged this list as previously hardcoded to [].
+  const systemNoShows: Reservation[] = (allUpcoming ?? []).filter((r) => {
+    if (r.status !== "confirmed") return false;
+    // Course is ~90 min; treat 2h after start as the auto-no-show window.
+    const endsAtMs =
+      new Date(r.service_starts_at).getTime() + 120 * 60_000;
+    return endsAtMs < nowMs;
+  });
 
   // KPI calcs
   const monthRevenue = monthly?.net_completed_centavos ?? 0;

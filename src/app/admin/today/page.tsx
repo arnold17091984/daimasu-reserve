@@ -367,7 +367,32 @@ function SeatingBlock({
                       <span>{b.guest_name}</span>
                     </div>
                     <div className="admin-meta print:text-black/60">
-                      {b.guest_phone}
+                      {b.guest_phone ? (
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 print:gap-1">
+                          {/* One-tap call + WhatsApp from the service sheet —
+                              ops review (M6) flagged that the phone number
+                              was plain text, forcing the floor manager to
+                              copy/paste during late-arrival outreach. */}
+                          <a
+                            href={`tel:${b.guest_phone.replace(/\s/g, "")}`}
+                            className="text-gold hover:underline print:text-black"
+                          >
+                            {b.guest_phone}
+                          </a>
+                          <a
+                            href={`https://wa.me/${b.guest_phone.replace(/[^\d]/g, "")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] uppercase tracking-[0.10em] text-text-secondary hover:text-gold print:text-black/60"
+                          >
+                            WhatsApp →
+                          </a>
+                        </span>
+                      ) : (
+                        <span className="text-text-muted">
+                          {ti(lang, "電話なし", "no phone")}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-2 py-3 text-right font-mono">{b.party_size}</td>
