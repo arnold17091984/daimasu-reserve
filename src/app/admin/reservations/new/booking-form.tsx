@@ -96,6 +96,11 @@ export function ManualBookingForm({
   const takenSet = useMemo(() => new Set(takenSeatNumbers), [takenSeatNumbers]);
   const seatRemaining = Math.max(0, settings.online_seats - seatTaken);
   const dateClosed = cellAvail?.closed ?? false;
+  // True if the operator typed a date outside the rendered availability
+  // grid (before the first row, after the last row, or any day we don't
+  // have an availability snapshot for). Treated as a hard block — without
+  // a grid cell we can't check capacity.
+  const dateOutOfGrid = date.length > 0 && cellAvail == null;
 
   const courseTotal = settings.course_price_centavos * partySize;
   const deposit = Math.floor((courseTotal * settings.deposit_pct) / 100);
@@ -178,6 +183,7 @@ export function ManualBookingForm({
       phoneTooLong ||
       partySizeMissing ||
       dateClosed ||
+      dateOutOfGrid ||
       partySize > seatRemaining ||
       (seatMode === "manual" && !manualPickValid)
     ) {
@@ -364,15 +370,12 @@ export function ManualBookingForm({
               type="date"
               value={date}
               onChange={(e) => {
+                // Always commit the operator's choice so they see the
+                // date they picked. Closed-date / out-of-range guards run
+                // via dateClosed / dateOutOfGrid below and block submit
+                // with a visible message — never silently snap back.
                 const next = e.target.value;
-                if (!next) return;
-                const closed = grid.find((g) => g.date === next)?.closed;
-                if (closed) {
-                  // Disallow closed dates; native <input type="date"> can't
-                  // disable arbitrary days, so guard on commit instead.
-                  return;
-                }
-                setDate(next);
+                if (next) setDate(next);
               }}
               min={grid[0]?.date}
               max={grid[grid.length - 1]?.date}
@@ -724,7 +727,15 @@ export function ManualBookingForm({
             )}
           </p>
         )}
-        {!dateClosed && seatRemaining === 0 && (
+        {dateOutOfGrid && (
+          <p className="border border-red-500/40 bg-red-500/[0.06] px-3 py-2 text-[13px] font-medium text-red-400">
+            {ti(
+              "選択した日は予約可能期間外です。空席表から日付を選び直してください。",
+              "Selected date is outside the bookable window. Pick a date from the availability table."
+            )}
+          </p>
+        )}
+        {!dateClosed && !dateOutOfGrid && seatRemaining === 0 && (
           <p className="border border-red-500/60 bg-red-500/[0.10] px-4 py-3 text-[14px] font-bold uppercase tracking-[0.08em] text-red-400">
             {ti(
               "この時間帯は満席です。別の日時を選んでください。",
@@ -732,7 +743,7 @@ export function ManualBookingForm({
             )}
           </p>
         )}
-        {!dateClosed && seatRemaining > 0 && partySize > seatRemaining && (
+        {!dateClosed && !dateOutOfGrid && seatRemaining > 0 && partySize > seatRemaining && (
           <div className="border border-red-500/60 bg-red-500/[0.10] px-4 py-3">
             <p className="text-[14px] font-bold text-red-400">
               {ti(
@@ -754,6 +765,7 @@ export function ManualBookingForm({
           disabled={
             status === "pending" ||
             dateClosed ||
+            dateOutOfGrid ||
             partySize < 1 ||
             partySize > seatRemaining ||
             (seatMode === "manual" && !manualPickValid)
