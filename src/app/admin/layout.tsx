@@ -10,6 +10,7 @@ import {
   Users,
   TrendingUp,
   Sparkles,
+  Receipt,
 } from "lucide-react";
 import { getAdmin } from "@/lib/auth/admin";
 import { getAdminLang, ti } from "@/lib/auth/admin-lang";
@@ -83,6 +84,9 @@ export default async function AdminLayout({
             <MobileNavLink href="/admin/revenue" icon={<TrendingUp size={14} />}>
               {ti(lang, "売上", "Revenue")}
             </MobileNavLink>
+            <MobileNavLink href="/admin/receipts" icon={<Receipt size={14} />}>
+              {ti(lang, "OR", "OR")}
+            </MobileNavLink>
             <MobileNavLink href="/admin/closed-dates" icon={<CalendarX size={14} />}>
               {ti(lang, "休業", "Closed")}
             </MobileNavLink>
@@ -135,6 +139,9 @@ export default async function AdminLayout({
               </NavLink>
               <NavLink href="/admin/revenue" icon={<TrendingUp size={16} />}>
                 {ti(lang, "売上分析", "Revenue")}
+              </NavLink>
+              <NavLink href="/admin/receipts" icon={<Receipt size={16} />}>
+                {ti(lang, "領収書 (OR)", "Receipts")}
               </NavLink>
               <NavLink href="/admin/closed-dates" icon={<CalendarX size={16} />}>
                 {ti(lang, "休業日", "Closed dates")}
