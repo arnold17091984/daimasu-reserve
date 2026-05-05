@@ -17,6 +17,7 @@ import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 import { PrintButton } from "./print-button";
 import { CounterSeatMap } from "../_components/counter-seat-map";
 import { celebrationSummaryLine } from "../_components/celebration-display";
+import { TodayRowActions } from "./inline-actions";
 import { Sparkles } from "lucide-react";
 
 export const runtime = "nodejs";
@@ -322,7 +323,10 @@ function SeatingBlock({
               <th className="px-2 py-2 text-right">{ti(lang, "人数", "Pax")}</th>
               <th className="px-2 py-2 text-left">{ti(lang, "言語", "Lang")}</th>
               <th className="px-2 py-2 text-left">{ti(lang, "備考", "Notes")}</th>
-              <th className="w-8 px-2 py-2 text-center print:table-cell">✓</th>
+              <th className="w-28 px-2 py-2 text-center print:hidden">
+                {ti(lang, "操作", "Actions")}
+              </th>
+              <th className="hidden w-8 px-2 py-2 text-center print:table-cell">✓</th>
             </tr>
           </thead>
           <tbody>
@@ -413,8 +417,15 @@ function SeatingBlock({
                       <span className="text-text-muted print:text-black/40">—</span>
                     ) : null}
                   </td>
-                  <td className="px-2 py-3 text-center">
-                    <span className="inline-block h-4 w-4 border border-border/60 print:border-black/40" />
+                  <td className="px-2 py-3 print:hidden">
+                    <TodayRowActions
+                      reservationId={b.id}
+                      balanceCentavos={b.balance_centavos}
+                      lang={lang}
+                    />
+                  </td>
+                  <td className="hidden px-2 py-3 text-center print:table-cell">
+                    <span className="inline-block h-4 w-4 border border-black/40" />
                   </td>
                 </tr>
               );
