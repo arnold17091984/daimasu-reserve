@@ -248,6 +248,28 @@ export const GALLERY_IMAGES: GalleryImage[] = [
 
 export const MAIN_SITE_URL = "https://daimasu.com.ph";
 
+/**
+ * Country dial codes shown in phone fields across the booking flow.
+ * PH first since the bar is in Makati and most guests are local; the
+ * rest cover the dominant inbound markets. The COUNTRY_OTHER sentinel
+ * lets the user type a full international number (`+886 ...`) directly
+ * for any unlisted country — without it the listed-country path would
+ * persist invalid `+63 +886...` strings (Codex 2026-05-06 finding).
+ */
+export const COUNTRY_OTHER = "other";
+export const COUNTRY_CODES = [
+  { code: "+63", label: "PH +63" },
+  { code: "+81", label: "JP +81" },
+  { code: "+1", label: "US +1" },
+  { code: "+65", label: "SG +65" },
+  { code: "+852", label: "HK +852" },
+  { code: "+82", label: "KR +82" },
+  { code: "+86", label: "CN +86" },
+  { code: "+44", label: "GB +44" },
+  { code: "+61", label: "AU +61" },
+  { code: COUNTRY_OTHER, label: "Other / その他" },
+] as const;
+
 export const COURSE_PRICE = {
   amount: "₱8,000",
   amountCentavos: 800_000,

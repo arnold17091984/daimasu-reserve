@@ -10,27 +10,7 @@ import { CelebrationPanel, EMPTY_CELEBRATION } from "../../_components/celebrati
 import { CelebrationReview } from "../../_components/celebration-display";
 import type { CelebrationData } from "@/lib/db/types";
 
-// Country dial codes shown in the phone field. PH first since the bar
-// is in Makati and most guests enter local numbers; the rest cover the
-// dominant inbound markets (JP/US/SG/HK/KR/CN/GB/AU). The "other" sentinel
-// switches the local-number input into "full international" mode where
-// the operator types `+886 9171234567` directly — no prefix is added by
-// the form. Without this, an operator handling a non-listed country would
-// type `+886...` into the local field with PH still selected, producing
-// an invalid `+63 +886...` save (Codex 2026-05-06 finding).
-const COUNTRY_OTHER = "other";
-const COUNTRY_CODES = [
-  { code: "+63", label: "PH +63" },
-  { code: "+81", label: "JP +81" },
-  { code: "+1", label: "US +1" },
-  { code: "+65", label: "SG +65" },
-  { code: "+852", label: "HK +852" },
-  { code: "+82", label: "KR +82" },
-  { code: "+86", label: "CN +86" },
-  { code: "+44", label: "GB +44" },
-  { code: "+61", label: "AU +61" },
-  { code: COUNTRY_OTHER, label: "Other / その他" },
-] as const;
+import { COUNTRY_CODES, COUNTRY_OTHER } from "@/lib/constants";
 
 interface DayCell {
   date: string;

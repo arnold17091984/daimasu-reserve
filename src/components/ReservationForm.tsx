@@ -5,7 +5,12 @@ import { MessageCircle, ArrowUpRight, Send, AlertCircle, Loader2, ShieldCheck } 
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useLang } from "@/lib/language";
-import { CONTACT, COURSE_PRICE } from "@/lib/constants";
+import {
+  CONTACT,
+  COURSE_PRICE,
+  COUNTRY_CODES,
+  COUNTRY_OTHER,
+} from "@/lib/constants";
 import { publicEnv } from "@/lib/env";
 
 const DEPOSIT_REQUIRED = publicEnv.depositRequired;
@@ -75,7 +80,25 @@ interface ApiErr {
 export default function ReservationForm() {
   const { t, lang } = useLang();
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  // Phone is split into a country dial code (default PH +63) and the
+  // local number, matching the admin form. The COUNTRY_OTHER option
+  // switches the input into "full international" mode where the guest
+  // types `+886 9171234567` directly. UX 2026-05-06 (Persona Tokyo
+  // tourist) — the previous single text input was unfriendly to
+  // non-PH numbers because the placeholder hard-coded a +63 example.
+  const [countryCode, setCountryCode] = useState<string>("+63");
+  const [phoneLocal, setPhoneLocal] = useState("");
+  const isCustomCountry = countryCode === COUNTRY_OTHER;
+  const fullPhone = isCustomCountry
+    ? phoneLocal.trim()
+    : `${countryCode} ${phoneLocal.trim()}`.trim();
+  const phoneInvalid = isCustomCountry
+    ? phoneLocal.trim().length > 0 && !phoneLocal.trim().startsWith("+")
+    : phoneLocal.includes("+");
+  const PHONE_MAX = 30;
+  const phoneLocalMaxLength = isCustomCountry
+    ? PHONE_MAX
+    : Math.max(1, PHONE_MAX - (countryCode.length + 1));
   const [email, setEmail] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [seating, setSeating] = useState<"s1" | "s2">("s1");
@@ -112,10 +135,19 @@ export default function ReservationForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (status === "sending" || status === "redirecting") return;
+    setAttemptedSubmit(true);
     if (!selectedDate) {
-      setAttemptedSubmit(true);
       document
         .querySelector(".rdp-daimasu")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (phoneInvalid) {
+      // Block submit so the server doesn't reject a "+63 +886..." string
+      // and silently confuse the guest. The inline message tells them
+      // exactly what to fix.
+      document
+        .getElementById("res-phone")
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -131,7 +163,7 @@ export default function ReservationForm() {
           party_size: Number(party),
           guest_name: name.trim(),
           guest_email: email.trim(),
-          guest_phone: phone.trim(),
+          guest_phone: fullPhone,
           guest_lang: lang,
           notes: notes.trim() || null,
           dietary:
@@ -436,18 +468,71 @@ export default function ReservationForm() {
             {t("6. 電話番号", "6. Phone")}
             <span className="ml-1 text-gold">*</span>
           </label>
-          <input
-            id="res-phone"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            required
-            autoComplete="tel"
-            inputMode="tel"
-            className={inputClass}
-            placeholder="+63 917 XXX XXXX"
-            pattern="[+0-9 ()-]{7,30}"
-          />
+          <div className="grid grid-cols-[120px_1fr] gap-2">
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              aria-label={t("国番号", "Country code")}
+              className={inputClass}
+            >
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              id="res-phone"
+              type="tel"
+              value={phoneLocal}
+              onChange={(e) => {
+                // Listed-country mode: strip any "+" the guest pastes
+                // so we never produce a `+63 +886...` double prefix.
+                // Custom mode: keep the leading "+" since it IS the
+                // country code.
+                const raw = e.target.value;
+                setPhoneLocal(
+                  isCustomCountry ? raw : raw.replace(/\+/g, "")
+                );
+              }}
+              required
+              autoComplete={isCustomCountry ? "tel" : "tel-national"}
+              inputMode="tel"
+              maxLength={phoneLocalMaxLength}
+              className={inputClass}
+              placeholder={
+                isCustomCountry
+                  ? "+886 9XX XXX XXXX"
+                  : countryCode === "+63"
+                    ? "9XX XXX XXXX"
+                    : t("番号を入力", "Phone number")
+              }
+            />
+          </div>
+          <p className="text-[11px] tracking-[0.04em] text-text-muted">
+            {isCustomCountry
+              ? t(
+                  "国番号 (+xxx) から続けて入力してください (例: +886 9171234567)",
+                  "Enter the full international number including the country code (e.g. +886 9171234567)"
+                )
+              : t(
+                  "リスト外の国は「Other / その他」を選んでください",
+                  'Select "Other" for countries not in the list'
+                )}
+          </p>
+          {attemptedSubmit && phoneInvalid && (
+            <p className="text-xs text-red-400">
+              {isCustomCountry
+                ? t(
+                    "国番号 + を先頭に付けてください",
+                    "Start with a + and country code"
+                  )
+                : t(
+                    "+ を含めず番号のみ入力してください。リスト外の国は「Other」を選んでください",
+                    'Don\'t include +. Pick "Other" for countries not listed.'
+                  )}
+            </p>
+          )}
         </div>
 
         {/* Dietary restrictions — structured (separate from free-text notes
