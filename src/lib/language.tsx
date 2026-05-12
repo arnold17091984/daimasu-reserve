@@ -26,24 +26,24 @@ const LangContext = createContext<LangContextType>({
 });
 
 export function LangProvider({ children }: { children: ReactNode }) {
-  // English is the primary surface; Japanese is opt-in (manual toggle, stored
-  // preference, or JA browser locale). SSR + first client render both use "en"
-  // to keep hydration in sync.
+  // English is the default surface; Japanese is fully opt-in via the
+  // visible toggle in the header. UX 2026-05-13: the previous behaviour
+  // auto-switched to JA when navigator.language started with "ja", which
+  // disoriented users on iPhones with JA system language — they landed
+  // on a Japanese page with the toggle hidden in the hamburger menu.
+  // Only respect an explicit stored preference now; browser locale is
+  // not consulted.
   const [lang, setLangState] = useState<Lang>("en");
 
   useEffect(() => {
-    let shouldSwitchToJa = false;
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "ja") shouldSwitchToJa = true;
-      else if (stored !== "en" && navigator.language.startsWith("ja"))
-        shouldSwitchToJa = true;
+      if (stored === "ja") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe bootstrap from explicit stored preference
+        setLangState("ja");
+      }
     } catch {
       /* private browsing, no-op */
-    }
-    if (shouldSwitchToJa) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe bootstrap from external storage/navigator
-      setLangState("ja");
     }
   }, []);
 

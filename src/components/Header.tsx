@@ -125,16 +125,29 @@ export default function Header() {
             </a>
           </div>
 
-          {/* Mobile hamburger (right) */}
-          <button
-            ref={toggleRef}
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="relative z-[60] ml-auto inline-flex min-h-[44px] min-w-[44px] items-center justify-center -m-2 p-2 text-foreground md:hidden"
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileOpen}
-          >
-            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+          {/* Mobile: lang toggle (always visible) + hamburger.
+              UX 2026-05-13: the lang toggle was previously hidden inside
+              the hamburger menu, so a JA-language iPhone user couldn't
+              discover how to switch to English. Surface it next to the
+              hamburger so it's always one tap away. */}
+          <div className="relative z-[60] ml-auto flex items-center gap-1 md:hidden">
+            <button
+              onClick={() => setLang(lang === "ja" ? "en" : "ja")}
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center border border-border/60 px-2 text-[12px] font-medium tracking-[0.10em] text-foreground hover:border-gold/50 hover:text-gold"
+              aria-label={lang === "ja" ? "Switch to English" : "日本語に切替"}
+            >
+              {lang === "ja" ? "EN" : "日本語"}
+            </button>
+            <button
+              ref={toggleRef}
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center -m-2 p-2 text-foreground"
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
       </div>
 

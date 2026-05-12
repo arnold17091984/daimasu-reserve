@@ -118,7 +118,7 @@ export default function Hero() {
             bound so even the longest variant fits the container on one line.
             JA ("マスターの食卓へ" — 8 chars) still scales up to 72px. */}
         <h1
-          className="hero-h1 mb-[22px] whitespace-nowrap font-[family-name:var(--font-noto-serif)] font-bold leading-[1.15] tracking-[0.02em] text-foreground [font-size:clamp(28px,6.5vw,56px)] [text-shadow:0_0_40px_rgba(0,0,0,0.95),0_0_20px_rgba(0,0,0,0.85),0_4px_8px_rgba(0,0,0,0.75),0_0_22px_rgba(255,255,255,0.12)] data-[lang=ja]:[font-size:clamp(34px,8.5vw,72px)]"
+          className="hero-h1 mb-[22px] font-[family-name:var(--font-noto-serif)] font-bold leading-[1.15] tracking-[0.02em] text-foreground [font-size:clamp(28px,6.5vw,56px)] [text-shadow:0_0_40px_rgba(0,0,0,0.95),0_0_20px_rgba(0,0,0,0.85),0_4px_8px_rgba(0,0,0,0.75),0_0_22px_rgba(255,255,255,0.12)] data-[lang=ja]:whitespace-nowrap data-[lang=ja]:[font-size:clamp(34px,8.5vw,72px)]"
           data-lang={lang}
         >
           {t(
@@ -152,7 +152,8 @@ export default function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.0, delay: 0.5 }}
-          className="mb-6 whitespace-nowrap font-[family-name:var(--font-noto-serif)] font-normal leading-[1.8] tracking-[0.06em] text-foreground text-shadow-hero [font-size:clamp(12px,3.6vw,22px)]"
+          className="mb-6 font-[family-name:var(--font-noto-serif)] font-normal leading-[1.8] tracking-[0.06em] text-foreground text-shadow-hero [font-size:clamp(12px,3.6vw,22px)] data-[lang=ja]:whitespace-nowrap"
+          data-lang={lang}
         >
           {t("マスター・アウリと綴る、九十分の懐石劇場", "Ninety minutes. Eight courses. One owl with a golden feather pen.")}
         </motion.p>
