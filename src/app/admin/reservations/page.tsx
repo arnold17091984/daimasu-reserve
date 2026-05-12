@@ -10,6 +10,7 @@ import { adminClient } from "@/lib/db/clients";
 import { formatPHP } from "@/lib/domain/reservation";
 import type { Reservation } from "@/lib/db/types";
 import { ReservationSearch } from "./search-input";
+import { DeleteReservationButton } from "./delete-button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,6 +193,12 @@ export default async function AdminReservationsPage({
                       >
                         {ti(lang, "詳細", "View")}
                       </Link>
+                      <DeleteReservationButton
+                        reservationId={r.id}
+                        guestName={r.guest_name}
+                        status={r.status}
+                        lang={lang}
+                      />
                     </td>
                   </tr>
                 ))}
