@@ -57,10 +57,16 @@ export async function sendEmail(args: SendArgs): Promise<SendEmailResult> {
 
   // I-1 fix: parens around the ternary so `??` doesn't bind tighter than `?:`
   // and silently always pick the second branch.
+  // Send from the root domain (daimasu.com.ph) — UX 2026-05-12: switched
+  // from the subdomain `reservations@reserve.daimasu.com.ph` to keep the
+  // sender memorable, improve deliverability (root domains carry better
+  // reputation than unfamiliar subdomains), and avoid having to verify
+  // an extra subdomain in Resend. The fallback to onboarding@resend.dev
+  // is for dev/test envs where the daimasu domain isn't configured.
   const from =
     args.fromOverride ??
     (env.NEXT_PUBLIC_SITE_URL.includes("daimasu")
-      ? "DAIMASU Reservations <reservations@reserve.daimasu.com.ph>"
+      ? "DAIMASU Reservations <reserve@daimasu.com.ph>"
       : "DAIMASU Reservations <onboarding@resend.dev>");
 
   const result: SendEmailResult = await (async () => {
