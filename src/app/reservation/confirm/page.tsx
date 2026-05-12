@@ -185,9 +185,11 @@ function NotFound() {
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-xl px-6 py-32">
         <h1 className="mb-3 text-center font-[family-name:var(--font-noto-serif)] text-2xl text-foreground">
-          予約が見つかりません / Reservation not found
+          Reservation not found / 予約が見つかりません
         </h1>
         <p className="text-center text-sm text-text-secondary">
+          Please check that the link is correct.
+          <br />
           リンクが正しいかご確認ください。
         </p>
         <p className="mt-8 text-center">

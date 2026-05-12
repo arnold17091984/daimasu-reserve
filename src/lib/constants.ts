@@ -43,7 +43,11 @@ interface FaqItem {
 // --- Constants ---
 
 export const CURRENT_CHAPTER = {
-  number: "第一章",
+  // Bilingual chapter marker — the JA "第一章" used to be hardcoded and
+  // showed on the English page (UX 2026-05-13 report). "Chapter I"
+  // matches the literary / theatre tone of the site's English copy
+  // and pairs cleanly with the chapter name on the right of the badge.
+  number: { ja: "第一章", en: "Chapter I" },
   name: { ja: "マスターの食卓", en: "Master Owly's Table" },
 };
 

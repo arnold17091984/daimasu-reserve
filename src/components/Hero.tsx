@@ -87,7 +87,7 @@ export default function Hero() {
           transition={{ duration: 1.5, delay: 0.3 }}
           className="text-shadow-hero inline-flex min-w-[214px] items-center justify-center border border-[rgba(212,175,55,0.72)] bg-black/25 px-4 py-2.5 font-[family-name:var(--font-noto-serif)] text-[13px] font-medium tracking-[0.14em] text-gold backdrop-blur-[4px] shadow-[inset_0_0_18px_rgba(212,175,55,0.08)] sm:min-w-[250px] sm:px-5 sm:py-3 sm:text-[14px]"
         >
-          <span>{CURRENT_CHAPTER.number}</span>
+          <span>{t(CURRENT_CHAPTER.number.ja, CURRENT_CHAPTER.number.en)}</span>
           <span className="mx-3 text-[#F2D47A]/60 sm:mx-[14px]">|</span>
           <span>{t(CURRENT_CHAPTER.name.ja, CURRENT_CHAPTER.name.en)}</span>
         </motion.div>
