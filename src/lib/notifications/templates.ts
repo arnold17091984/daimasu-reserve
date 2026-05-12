@@ -335,6 +335,58 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Owner-side new-booking email. UX 2026-05-12: the operator wanted an
+ * email channel in addition to Telegram so notifications hit their
+ * Gmail inbox too — useful when Telegram is on a phone they don't
+ * carry into the kitchen. Body intentionally compact and ops-focused:
+ * the guest already gets the full pretty confirmation; this is the
+ * "who's coming, when, what to prep" digest.
+ */
+export function renderOwnerNewBookingEmail(r: Reservation): {
+  subject: string;
+  html: string;
+} {
+  const d = new Date(r.service_starts_at).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const seatingLabel = r.seating === "s1" ? "S1 17:30" : "S2 20:00";
+  const subject = `[DAIMASU] New booking: ${r.guest_name} · ${seatingLabel} · ${r.party_size}p`;
+
+  const dietarySection = r.dietary
+    ? `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;letter-spacing:0.04em;">${r.dietary.severe ? "⚠ SEVERE" : "Dietary"}</td><td style="padding:6px 0;color:${r.dietary.severe ? "#ff6b6b" : PALETTE.text};font-size:14px;text-align:right;">${escapeHtml(r.dietary.type)}${r.dietary.allergens ? " · " + escapeHtml(r.dietary.allergens) : ""}${r.dietary.instructions ? " — " + escapeHtml(r.dietary.instructions) : ""}</td></tr>`
+    : "";
+
+  const row = (k: string, v: string) =>
+    `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;letter-spacing:0.04em;">${k}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${v}</td></tr>`;
+
+  const body = `<h1 style="margin:0 0 8px;font-size:18px;font-weight:500;letter-spacing:0.06em;color:${PALETTE.goldSoft};">🥢 New reservation confirmed</h1>
+    <p style="margin:0 0 12px;font-size:12px;color:${PALETTE.textMuted};">Operator alert — guest already received their confirmation email.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${PALETTE.border};border-bottom:1px solid ${PALETTE.border};margin:12px 0;">
+      ${row("Name", escapeHtml(r.guest_name))}
+      ${row("When", `${d} · ${seatingLabel}`)}
+      ${row("Party", `${r.party_size}`)}
+      ${row("Phone", r.guest_phone ? escapeHtml(r.guest_phone) : "—")}
+      ${row("Email", escapeHtml(r.guest_email))}
+      ${row("Lang", r.guest_lang.toUpperCase())}
+      ${row("Source", escapeHtml(r.source))}
+      ${dietarySection}
+      ${r.notes ? row("Notes", escapeHtml(r.notes)) : ""}
+      ${row("Deposit", `${formatPHP(r.deposit_centavos)} ${r.deposit_centavos > 0 ? "(paid)" : "(none)"}`)}
+      ${row("Balance", `${formatPHP(r.balance_centavos)} (on arrival)`)}
+    </table>
+    <p style="margin:12px 0 0;font-size:12px;color:${PALETTE.textMuted};">
+      <a href="https://reserve.daimasu.com.ph/admin/reservations/${r.id}" style="color:${PALETTE.goldSoft};">Open in admin →</a>
+    </p>`;
+
+  return { subject, html: shell(subject, body, "en") };
+}
+
 /** Telegram (HTML mode) — short ops-side notification. */
 export function renderTelegramConfirm(r: Reservation): string {
   const d = new Date(r.service_starts_at).toLocaleString("en-PH", {

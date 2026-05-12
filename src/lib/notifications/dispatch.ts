@@ -13,10 +13,12 @@ import { serverEnv } from "@/lib/env";
 import { issueCancelToken } from "@/lib/security/cancel-token";
 import {
   renderConfirmEmail,
+  renderOwnerNewBookingEmail,
   renderTelegramConfirm,
 } from "@/lib/notifications/templates";
 import { sendEmail } from "@/lib/notifications/email";
 import { notifyTelegram } from "@/lib/notifications/telegram";
+import { CONTACT } from "@/lib/constants";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
 type SbClient = SupabaseClient;
@@ -111,6 +113,22 @@ export async function sendConfirmationDispatch(
     chatIdOverride: settings.telegram_chat_id,
     log: { reservation_id: reservation.id, kind: "admin_alert" },
   });
+
+  // Owner-side email alert (2026-05-12): adds an email channel alongside
+  // Telegram so the operator gets a copy in their Gmail. Compact ops
+  // template (separate from the guest's pretty confirmation). Failure
+  // is non-fatal — booking is already committed and the guest email +
+  // Telegram likely already succeeded.
+  if (CONTACT.email && CONTACT.email !== reservation.guest_email) {
+    const owner = renderOwnerNewBookingEmail(reservation);
+    await sendEmail({
+      to: CONTACT.email,
+      subject: owner.subject,
+      html: owner.html,
+      idempotencyKey: `email:owner-alert:${reservation.id}`,
+      log: { reservation_id: reservation.id, kind: "admin_alert" },
+    });
+  }
 
   return {token: canonical.token, expiresAt: canonical.expiresAt};
 }

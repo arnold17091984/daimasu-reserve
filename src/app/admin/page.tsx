@@ -380,7 +380,7 @@ export default async function AdminDashboardPage() {
           {(recentAudits ?? []).map((a) => (
             <li
               key={a.id}
-              className="grid grid-cols-[88px_88px_1fr_auto] items-center gap-3 px-3 py-2 text-[12px]"
+              className="grid grid-cols-[64px_minmax(0,150px)_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-[12px]"
             >
               <span className="admin-meta admin-num">
                 {new Date(a.occurred_at).toLocaleTimeString(lang === "ja" ? "ja-JP" : "en-PH", {
@@ -389,8 +389,16 @@ export default async function AdminDashboardPage() {
                   minute: "2-digit",
                 })}
               </span>
-              <span className="text-[11px] uppercase tracking-[0.14em] text-gold">
-                {a.actor}
+              <span
+                className="truncate text-[11px] uppercase tracking-[0.14em] text-gold"
+                title={a.actor}
+              >
+                {/* Strip the @domain — gmail.com on every row is noise; the
+                    full email is still available via the title tooltip.
+                    Fixes 2026-05-12 overlap report (actor cell was 88px,
+                    daimasumakati@gmail.com is 23 chars and spilled into
+                    the action label column). */}
+                {a.actor.includes("@") ? a.actor.split("@")[0] : a.actor}
               </span>
               <span className="truncate">{actionLabel(a.action, lang)}</span>
               {a.reservation_id && (
