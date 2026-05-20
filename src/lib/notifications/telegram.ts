@@ -28,28 +28,57 @@ type SendResult =
   | { ok: true; sent: number; failed: number }
   | { ok: false; reason: string };
 
+/** Total send attempts per chat before giving up (1 initial + 2 retries). */
+const MAX_ATTEMPTS = 3;
+/** Per-request timeout. Telegram normally answers in <1s; 8s is generous. */
+const REQUEST_TIMEOUT_MS = 8000;
+
 async function sendOne(
   token: string,
   chatId: string,
   text: string
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
-    });
-    const data = (await res.json()) as { ok?: boolean; description?: string };
-    if (!data.ok) return { ok: false, reason: data.description ?? "telegram_error" };
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : "send_failed" };
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const body = JSON.stringify({
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  });
+
+  // Retry transient network failures. "fetch failed" / socket hang-up
+  // happens when undici reuses a keep-alive connection that Telegram has
+  // already closed — a fresh connection on the next attempt almost always
+  // succeeds. 2026-05-20: a real booking's group-chat notification was
+  // permanently lost to a single un-retried "fetch failed". A Telegram
+  // *API* rejection (data.ok === false, e.g. "chat not found") is NOT
+  // transient and is returned immediately without retrying.
+  let lastReason = "send_failed";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+      const data = (await res.json()) as { ok?: boolean; description?: string };
+      if (data.ok) return { ok: true };
+      // Telegram-level rejection — deterministic, retrying won't help.
+      return { ok: false, reason: data.description ?? "telegram_error" };
+    } catch (err) {
+      lastReason = err instanceof Error ? err.message : "send_failed";
+      if (attempt < MAX_ATTEMPTS) {
+        // Linear backoff: 300ms, 600ms.
+        await new Promise((r) => setTimeout(r, 300 * attempt));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return { ok: false, reason: `${lastReason} (after ${MAX_ATTEMPTS} attempts)` };
 }
 
 export async function notifyTelegram(args: NotifyArgs): Promise<SendResult> {
