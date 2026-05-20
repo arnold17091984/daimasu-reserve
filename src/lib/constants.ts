@@ -324,8 +324,8 @@ export const CONTACT = {
   },
   email: "daimasumakati@gmail.com",
   restaurantHours: {
-    ja: "11:00〜24:00 (毎日営業)",
-    en: "11:00–24:00 · open daily",
+    ja: "17:30〜21:30 (月曜定休)",
+    en: "17:30–21:30 · closed Mondays",
   },
   // Use www.google.com (not maps.google.com) — the site CSP only whitelists
   // www.google.com under frame-src. The maps subdomain was blocked, so the
