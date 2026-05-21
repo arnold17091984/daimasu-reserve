@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MessageCircle, ArrowUpRight, Send, AlertCircle, Loader2, ShieldCheck } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -131,6 +131,63 @@ export default function ReservationForm() {
   }, []);
 
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+  // Per-date seat availability — powers the "seats remaining" display.
+  // Fetched once on mount for the whole bookable window; refreshed when
+  // a booking succeeds so the count stays honest within the session.
+  const [availability, setAvailability] = useState<
+    Map<string, { s1: number; s2: number; closed: boolean }>
+  >(new Map());
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const from = toIsoDate(minDate);
+    const to = toIsoDate(maxDate);
+    fetch(`/api/availability?from=${from}&to=${to}`, {
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then(
+        (data: {
+          ok: boolean;
+          days?: {
+            date: string;
+            s1_remaining: number;
+            s2_remaining: number;
+            closed: boolean;
+          }[];
+        }) => {
+          if (!data.ok || !data.days) return;
+          const map = new Map<
+            string,
+            { s1: number; s2: number; closed: boolean }
+          >();
+          for (const d of data.days) {
+            map.set(d.date, {
+              s1: d.s1_remaining,
+              s2: d.s2_remaining,
+              closed: d.closed,
+            });
+          }
+          setAvailability(map);
+        }
+      )
+      .catch(() => {
+        /* availability is advisory — a failed fetch just hides the count */
+      });
+    return () => controller.abort();
+  }, [minDate, maxDate]);
+
+  // Remaining seats for the currently-selected date (null until a date
+  // is picked or if availability hasn't loaded).
+  const selectedAvail = selectedDate
+    ? (availability.get(toIsoDate(selectedDate)) ?? null)
+    : null;
+  const seatsRemaining = selectedAvail
+    ? seating === "s1"
+      ? selectedAvail.s1
+      : selectedAvail.s2
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,6 +397,13 @@ export default function ReservationForm() {
           >
             {SEATINGS.map((s) => {
               const active = seating === s.value;
+              // Remaining seats for THIS seating on the selected date.
+              const rem = selectedAvail
+                ? s.value === "s1"
+                  ? selectedAvail.s1
+                  : selectedAvail.s2
+                : null;
+              const full = rem === 0;
               return (
                 <button
                   key={s.value}
@@ -349,15 +413,49 @@ export default function ReservationForm() {
                   onClick={() => setSeating(s.value)}
                   className={
                     active
-                      ? "btn-gold-ornate flex h-14 items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
-                      : "btn-ornate-ghost flex h-14 items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
+                      ? "btn-gold-ornate flex h-14 flex-col items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
+                      : "btn-ornate-ghost flex h-14 flex-col items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
                   }
                 >
-                  {t(s.label.ja, s.label.en)}
+                  <span>{t(s.label.ja, s.label.en)}</span>
+                  {rem !== null && (
+                    <span
+                      className={
+                        // On the active button the background is gold, so
+                        // amber / muted text would be invisible — use a
+                        // dark tone there. On the inactive (dark) button
+                        // keep the red/amber/muted urgency colours.
+                        active
+                          ? "mt-0.5 text-[10px] font-medium tracking-[0.06em] text-black/70"
+                          : full
+                            ? "mt-0.5 text-[10px] font-normal tracking-[0.06em] text-red-400"
+                            : rem <= 2
+                              ? "mt-0.5 text-[10px] font-normal tracking-[0.06em] text-amber-400"
+                              : "mt-0.5 text-[10px] font-normal tracking-[0.06em] text-text-muted"
+                      }
+                    >
+                      {full
+                        ? t("満席", "Full")
+                        : t(`残り${rem}席`, `${rem} seat${rem > 1 ? "s" : ""} left`)}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
+          {selectedDate && selectedAvail === null && (
+            <p className="text-[11px] tracking-[0.04em] text-text-muted">
+              {t("空席情報を確認中…", "Checking seat availability…")}
+            </p>
+          )}
+          {selectedDate && selectedAvail?.closed && (
+            <p className="text-[12px] font-medium tracking-[0.04em] text-red-400">
+              {t(
+                "選択した日は休業日です。別の日をお選びください。",
+                "This date is closed. Please choose another day."
+              )}
+            </p>
+          )}
         </div>
 
         {/* Step 3 — Party size */}
@@ -395,6 +493,19 @@ export default function ReservationForm() {
           <p className="text-[11px] tracking-[0.04em] text-text-muted">
             {t("※ カウンター8席限定・最大8名まで・12歳以上", "Counter seats up to 8 guests · age 12+ only.")}
           </p>
+          {/* Over-capacity warning — the party can't fit the seats still
+              open for the chosen date + seating. Server still re-checks
+              on submit; this is the proactive heads-up. */}
+          {seatsRemaining !== null &&
+            seatsRemaining > 0 &&
+            Number(party) > seatsRemaining && (
+              <p className="text-[12px] font-medium tracking-[0.04em] text-amber-400">
+                {t(
+                  `この時間帯は残り ${seatsRemaining} 席です。人数を ${seatsRemaining} 名以下にするか、別の時間帯・日付をお選びください。`,
+                  `Only ${seatsRemaining} seat${seatsRemaining > 1 ? "s" : ""} left for this seating. Reduce the party to ${seatsRemaining} or pick another seating / date.`
+                )}
+              </p>
+            )}
           {/* Live cost estimate — incl. PH 10% service charge + 12% VAT.
               UX 2026-05-06 (Persona Filipino professional / Western
               traveller) flagged the previous "tax & service not
