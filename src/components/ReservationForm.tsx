@@ -58,6 +58,72 @@ function toIsoDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * One row of the seat-dots availability panel: a seating label, a row of
+ * `total` dots (filled = booked, outline = open), and a remaining-seat
+ * count. The currently-selected seating is highlighted. UX 2026-05-21.
+ */
+function SeatDotRow({
+  label,
+  total,
+  remaining,
+  highlighted,
+  lang,
+}: {
+  label: string;
+  total: number;
+  remaining: number;
+  highlighted: boolean;
+  lang: "ja" | "en";
+}) {
+  const taken = Math.max(0, total - remaining);
+  const full = remaining === 0;
+  const low = remaining > 0 && remaining <= 2;
+  const countText = full
+    ? lang === "ja"
+      ? "満席"
+      : "Full"
+    : lang === "ja"
+      ? `あと${remaining}席`
+      : `${remaining} left`;
+  return (
+    <div
+      className={
+        highlighted
+          ? "flex items-center gap-3 border border-gold/50 bg-gold/[0.06] px-2.5 py-2"
+          : "flex items-center gap-3 border border-transparent px-2.5 py-2 opacity-70"
+      }
+    >
+      <span className="w-[116px] shrink-0 font-[family-name:var(--font-noto-serif)] text-[12px] tracking-[0.04em] text-foreground">
+        {label}
+      </span>
+      <span className="flex flex-1 flex-wrap gap-1" aria-hidden="true">
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={
+              i < taken
+                ? "h-3 w-3 rounded-full bg-text-muted"
+                : "h-3 w-3 rounded-full border border-gold bg-transparent"
+            }
+          />
+        ))}
+      </span>
+      <span
+        className={
+          full
+            ? "shrink-0 text-[12px] font-bold tracking-[0.04em] text-red-400"
+            : low
+              ? "shrink-0 text-[12px] font-bold tracking-[0.04em] text-amber-400"
+              : "shrink-0 text-[12px] font-medium tracking-[0.04em] text-gold"
+        }
+      >
+        {countText}
+      </span>
+    </div>
+  );
+}
+
 interface ApiOk {
   ok: true;
   reservation_id: string;
@@ -132,12 +198,13 @@ export default function ReservationForm() {
 
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-  // Per-date seat availability — powers the "seats remaining" display.
-  // Fetched once on mount for the whole bookable window; refreshed when
-  // a booking succeeds so the count stays honest within the session.
+  // Per-date seat availability — powers the seat-dots display.
+  // Fetched once on mount for the whole bookable window.
   const [availability, setAvailability] = useState<
     Map<string, { s1: number; s2: number; closed: boolean }>
   >(new Map());
+  // Total counter seats per seating (8) — needed to render the dot row.
+  const [totalSeats, setTotalSeats] = useState(8);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -150,6 +217,7 @@ export default function ReservationForm() {
       .then(
         (data: {
           ok: boolean;
+          online_seats?: number;
           days?: {
             date: string;
             s1_remaining: number;
@@ -158,6 +226,7 @@ export default function ReservationForm() {
           }[];
         }) => {
           if (!data.ok || !data.days) return;
+          if (data.online_seats) setTotalSeats(data.online_seats);
           const map = new Map<
             string,
             { s1: number; s2: number; closed: boolean }
@@ -397,13 +466,6 @@ export default function ReservationForm() {
           >
             {SEATINGS.map((s) => {
               const active = seating === s.value;
-              // Remaining seats for THIS seating on the selected date.
-              const rem = selectedAvail
-                ? s.value === "s1"
-                  ? selectedAvail.s1
-                  : selectedAvail.s2
-                : null;
-              const full = rem === 0;
               return (
                 <button
                   key={s.value}
@@ -413,48 +475,57 @@ export default function ReservationForm() {
                   onClick={() => setSeating(s.value)}
                   className={
                     active
-                      ? "btn-gold-ornate flex h-14 flex-col items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
-                      : "btn-ornate-ghost flex h-14 flex-col items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
+                      ? "btn-gold-ornate flex h-14 items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
+                      : "btn-ornate-ghost flex h-14 items-center justify-center font-[family-name:var(--font-noto-serif)] text-sm font-medium tracking-[0.1em]"
                   }
                 >
-                  <span>{t(s.label.ja, s.label.en)}</span>
-                  {rem !== null && (
-                    <span
-                      className={
-                        // On the active button the background is gold, so
-                        // amber / muted text would be invisible — use a
-                        // dark tone there. On the inactive (dark) button
-                        // keep the red/amber/muted urgency colours.
-                        active
-                          ? "mt-0.5 text-[10px] font-medium tracking-[0.06em] text-black/70"
-                          : full
-                            ? "mt-0.5 text-[10px] font-normal tracking-[0.06em] text-red-400"
-                            : rem <= 2
-                              ? "mt-0.5 text-[10px] font-normal tracking-[0.06em] text-amber-400"
-                              : "mt-0.5 text-[10px] font-normal tracking-[0.06em] text-text-muted"
-                      }
-                    >
-                      {full
-                        ? t("満席", "Full")
-                        : t(`残り${rem}席`, `${rem} seat${rem > 1 ? "s" : ""} left`)}
-                    </span>
-                  )}
+                  {t(s.label.ja, s.label.en)}
                 </button>
               );
             })}
           </div>
+
+          {/* Seat-dots availability panel — visualises the 8-seat counter
+              filling up. Filled = booked, outline = open. Shows both
+              seatings so the guest can compare before choosing. UX
+              2026-05-21: replaced the easily-missed tiny sub-label. */}
           {selectedDate && selectedAvail === null && (
-            <p className="text-[11px] tracking-[0.04em] text-text-muted">
-              {t("空席情報を確認中…", "Checking seat availability…")}
+            <p className="text-[12px] tracking-[0.04em] text-text-muted">
+              {t("空席状況を確認中…", "Checking seat availability…")}
             </p>
           )}
           {selectedDate && selectedAvail?.closed && (
-            <p className="text-[12px] font-medium tracking-[0.04em] text-red-400">
+            <p className="border border-red-500/50 bg-red-500/[0.08] px-4 py-3 text-[13px] font-medium tracking-[0.04em] text-red-400">
               {t(
                 "選択した日は休業日です。別の日をお選びください。",
                 "This date is closed. Please choose another day."
               )}
             </p>
+          )}
+          {selectedDate && selectedAvail && !selectedAvail.closed && (
+            <div className="flex flex-col gap-2.5 border border-border bg-background/40 px-4 py-3.5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-text-secondary">
+                {t("カウンター空席状況", "Counter availability")}
+              </p>
+              {SEATINGS.map((s) => (
+                <SeatDotRow
+                  key={s.value}
+                  label={t(s.label.ja, s.label.en)}
+                  total={totalSeats}
+                  remaining={
+                    s.value === "s1" ? selectedAvail.s1 : selectedAvail.s2
+                  }
+                  highlighted={seating === s.value}
+                  lang={lang}
+                />
+              ))}
+              <p className="text-[10px] tracking-[0.04em] text-text-muted">
+                {t(
+                  "● 予約済   ○ 空席",
+                  "● booked   ○ available"
+                )}
+              </p>
+            </div>
           )}
         </div>
 
