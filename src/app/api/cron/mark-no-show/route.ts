@@ -9,9 +9,10 @@
  * Default grace = service_minutes (90), so 3h after start.
  */
 import "server-only";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { verifyCronAuth } from "@/lib/security/cron-auth";
+import { notifyAffiliate } from "@/lib/notifications/affiliate-webhook";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -52,7 +53,10 @@ export async function POST(req: NextRequest) {
 
   const ids = stale.map((r) => r.id);
   const nowIso = new Date().toISOString();
-  const { error: updErr } = await sb
+  // .select() so we act on the rows ACTUALLY transitioned — a concurrent
+  // settle / manual no-show between the read above and this update could
+  // otherwise make the pre-update `stale` list wrong.
+  const { data: flipped, error: updErr } = await sb
     .from("reservations")
     .update({
       status: "no_show",
@@ -60,20 +64,47 @@ export async function POST(req: NextRequest) {
       cancelled_by: "system",
     })
     .in("id", ids)
-    .eq("status", "confirmed");
+    .eq("status", "confirmed")
+    .select("*")
+    .returns<Reservation[]>();
   if (updErr) {
     return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
   }
+  const flippedRows = flipped ?? [];
+  const flippedIds = flippedRows.map((r) => r.id);
 
-  // Bulk audit
-  await sb.from("audit_log").insert(
-    ids.map((id) => ({
-      actor: "system",
-      reservation_id: id,
-      action: "reservation.no_show",
-      reason: "auto: not settled after service window",
-    }))
-  );
+  // Bulk audit — only the rows actually transitioned.
+  if (flippedIds.length > 0) {
+    await sb.from("audit_log").insert(
+      flippedIds.map((id) => ({
+        actor: "system",
+        reservation_id: id,
+        action: "reservation.no_show",
+        reason: "auto: not settled after service window",
+      }))
+    );
+  }
 
-  return NextResponse.json({ ok: true, marked: ids.length, ids });
+  // Notify the affiliate app for any auto-no-show carrying affiliate
+  // attribution, so the referring cast's commission is withheld. The
+  // manual no-show route already does this; the cron path is the
+  // documented daily mechanism and must do it too. Pushed into after()
+  // so the cron response isn't blocked on the webhook retry loop.
+  after(() => {
+    for (const r of flippedRows) {
+      if (!r.affiliate_link_slug && !r.affiliate_coupon_code) continue;
+      void notifyAffiliate({
+        event: "reservation.no_show",
+        reservation_id: r.id,
+        affiliate_link_slug: r.affiliate_link_slug ?? null,
+        affiliate_coupon_code: r.affiliate_coupon_code ?? null,
+        guest_name: r.guest_name,
+        guest_phone: r.guest_phone,
+        service_date: r.service_date,
+        occurred_at: nowIso,
+      });
+    }
+  });
+
+  return NextResponse.json({ ok: true, marked: flippedIds.length, ids: flippedIds });
 }

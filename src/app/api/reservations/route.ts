@@ -205,14 +205,39 @@ export async function POST(req: NextRequest) {
         .eq("id", reservationId)
         .single<Reservation>();
       if (existing) {
-        return NextResponse.json(
-          {
-            ok: true,
-            reservation_id: reservationId,
-            confirmed: existing.status === "confirmed",
-            idempotent: true,
-          },
-          { status: 200 }
+        // Verify the retried payload is the SAME booking. A mismatched
+        // date / seating / size / phone means the idempotency key was
+        // wrongly reused — never silently treat that as success.
+        const sameBooking =
+          existing.service_date === input.service_date &&
+          existing.seating === input.seating &&
+          existing.party_size === input.party_size &&
+          existing.guest_phone === input.guest_phone;
+        if (!sameBooking) {
+          return errJson(
+            { code: "validation", details: "idempotency_key_reused" },
+            409
+          );
+        }
+        // Only a confirmed row is a clean idempotent success. A row still
+        // in pending_payment (deposit flow) has no checkout_url to return
+        // here — signal a retryable conflict so the caller comes back
+        // once the first request has finished creating the Stripe
+        // session, rather than handing back a payment-less response.
+        if (existing.status === "confirmed") {
+          return NextResponse.json(
+            {
+              ok: true,
+              reservation_id: reservationId,
+              confirmed: true,
+              idempotent: true,
+            },
+            { status: 200 }
+          );
+        }
+        return errJson(
+          { code: "internal", reason: `retry_pending:${existing.status}` },
+          409
         );
       }
     }
