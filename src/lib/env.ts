@@ -80,6 +80,19 @@ const schema = z.object({
   TELEGRAM_BOT_TOKEN_FALLBACK: z.string().optional(),
   TELEGRAM_CHAT_ID_FALLBACK: z.string().optional(),
 
+  // Shared secret for server-to-server calls from the cast-affiliate app.
+  // When set, a POST /api/reservations carrying `Authorization: Bearer
+  // <this>` is treated as affiliate-origin: IP rate-limit is bypassed
+  // (the affiliate server is a single IP) and affiliate attribution
+  // columns are honoured. Min 32 chars when present. Optional so the
+  // reserve app still boots before the integration is wired up.
+  AFFILIATE_S2S_SECRET: z.string().min(32).optional(),
+  // Outbound webhook target — the affiliate app's reserve-settled
+  // receiver. When both this and AFFILIATE_S2S_SECRET are set, settle /
+  // mark-no-show POST a signed event so the cast's commission can
+  // confirm off the real reservation lifecycle.
+  AFFILIATE_WEBHOOK_URL: z.string().url().optional(),
+
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 

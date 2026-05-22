@@ -21,6 +21,7 @@
  *  No Stripe touchpoints, no pending_payment limbo, no reap-pending step.
  */
 import "server-only";
+import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { stripe, toStripeAmount } from "@/lib/stripe/client";
@@ -47,25 +48,36 @@ type ApiError =
   | { code: "internal"; reason?: string };
 
 export async function POST(req: NextRequest) {
-  // 0. rate-limit: 5 booking attempts / IP / 10 min, plus 20 / IP / hour.
+  // 0a. Server-to-server origin check. The cast-affiliate app calls this
+  // endpoint with `Authorization: Bearer <AFFILIATE_S2S_SECRET>`. A match
+  // marks the request affiliate-origin: the per-IP rate-limit is skipped
+  // (the affiliate server is one IP and would self-throttle) and the
+  // affiliate attribution fields are honoured. timingSafeEqual avoids a
+  // comparison-timing side channel.
+  const isAffiliateOrigin = checkAffiliateBearer(req);
+
+  // 0b. rate-limit: 5 booking attempts / IP / 10 min, plus 20 / IP / hour.
   // Bot floods + competitive seat-sniping both die here. Honeypot stays
   // active separately — bots that pass the rate cap also need a clean
   // `website` field. Retry-After header tells well-behaved clients when
-  // to come back; bots ignore it and burn quota.
-  const ipKey = clientKey(req, "reservations");
-  const burst = limit("reservations:burst", ipKey, 5, 10 * 60 * 1000);
-  if (!burst.ok) {
-    return new NextResponse(
-      JSON.stringify({ ok: false, error: { code: "rate_limited" } }),
-      { status: 429, headers: { ...rateLimitHeaders(burst), "Content-Type": "application/json" } }
-    );
-  }
-  const hourly = limit("reservations:hourly", ipKey, 20, 60 * 60 * 1000);
-  if (!hourly.ok) {
-    return new NextResponse(
-      JSON.stringify({ ok: false, error: { code: "rate_limited" } }),
-      { status: 429, headers: { ...rateLimitHeaders(hourly), "Content-Type": "application/json" } }
-    );
+  // to come back; bots ignore it and burn quota. Skipped for the
+  // affiliate server (trusted, bearer-authed, single IP).
+  if (!isAffiliateOrigin) {
+    const ipKey = clientKey(req, "reservations");
+    const burst = limit("reservations:burst", ipKey, 5, 10 * 60 * 1000);
+    if (!burst.ok) {
+      return new NextResponse(
+        JSON.stringify({ ok: false, error: { code: "rate_limited" } }),
+        { status: 429, headers: { ...rateLimitHeaders(burst), "Content-Type": "application/json" } }
+      );
+    }
+    const hourly = limit("reservations:hourly", ipKey, 20, 60 * 60 * 1000);
+    if (!hourly.ok) {
+      return new NextResponse(
+        JSON.stringify({ ok: false, error: { code: "rate_limited" } }),
+        { status: 429, headers: { ...rateLimitHeaders(hourly), "Content-Type": "application/json" } }
+      );
+    }
   }
 
   // 1. parse + validate
@@ -120,8 +132,15 @@ export async function POST(req: NextRequest) {
   const balance = depositRequired ? breakdown.balance : totalCentavos;
   const depositPct = depositRequired ? settings.deposit_pct : 0;
 
-  // pre-issue an id so we can use it in the cancel-token + Stripe metadata
-  const reservationId = crypto.randomUUID();
+  // pre-issue an id so we can use it in the cancel-token + Stripe metadata.
+  // For affiliate-origin calls we honour a client-supplied UUID as the id
+  // so a retried POST (e.g. after a network timeout) collides on the
+  // primary key inside book_reservation_atomic instead of allocating a
+  // second seat. Public callers always get a fresh server-generated id.
+  const reservationId =
+    isAffiliateOrigin && input.reservation_id
+      ? input.reservation_id
+      : crypto.randomUUID();
 
   // P1-2 fix: bound token TTL to "service date + 7 days" instead of a flat 90 days,
   // so a leaked token from a forwarded email has a tight blast radius.
@@ -171,6 +190,32 @@ export async function POST(req: NextRequest) {
     if (bookErr?.message.includes("capacity_exceeded")) {
       return errJson({ code: "capacity_exceeded" }, 409);
     }
+    // Idempotent retry: a client-supplied reservation_id that already
+    // exists collides on the PK inside book_reservation_atomic. Treat it
+    // as success and return the existing row instead of a 500 — this is
+    // exactly the affiliate retry-after-timeout path, where booking twice
+    // would otherwise burn a second seat.
+    const isDuplicateId =
+      bookErr?.code === "23505" ||
+      (bookErr?.message.includes("duplicate key") ?? false);
+    if (isAffiliateOrigin && input.reservation_id && isDuplicateId) {
+      const { data: existing } = await sb
+        .from("reservations")
+        .select("*")
+        .eq("id", reservationId)
+        .single<Reservation>();
+      if (existing) {
+        return NextResponse.json(
+          {
+            ok: true,
+            reservation_id: reservationId,
+            confirmed: existing.status === "confirmed",
+            idempotent: true,
+          },
+          { status: 200 }
+        );
+      }
+    }
     return errJson({ code: "internal", reason: bookErr?.message ?? "book_failed" }, 500);
   }
   // seat_numbers is filled by the atomic RPC; surfaced for downstream
@@ -197,6 +242,50 @@ export async function POST(req: NextRequest) {
     // Echo back into the in-memory row so the confirmation email can
     // render the dietary block even before the migration runs.
     bookedRow.dietary = input.dietary;
+  }
+
+  // Persist cast-affiliate attribution (migration 0021). Honoured ONLY
+  // for affiliate-origin (S2S bearer) calls — a public caller cannot
+  // forge an attribution by stuffing these fields into the JSON body.
+  // Same defensive follow-up UPDATE as dietary: a 42703 (column not yet
+  // migrated) is swallowed so the booking still succeeds.
+  if (isAffiliateOrigin && (input.affiliate_link_slug || input.affiliate_coupon_code)) {
+    const { error: affErr } = await sb
+      .from("reservations")
+      .update({
+        affiliate_link_slug: input.affiliate_link_slug ?? null,
+        affiliate_coupon_code: input.affiliate_coupon_code ?? null,
+      })
+      .eq("id", reservationId);
+    if (affErr) {
+      // Attribution failed to persist — commission-critical. Settle /
+      // no-show webhooks read the slug off this row, so a silent loss
+      // here means the referring cast never gets paid. The booking is
+      // already committed and must NOT roll back, so instead record the
+      // failure durably in audit_log for manual backfill / reconciliation.
+      // Covers both 42703 (migration skew) and any transient DB error.
+      console.warn(
+        "[reservations] affiliate attribution update failed",
+        affErr.code,
+        affErr.message
+      );
+      after(() =>
+        auditInsert(sb, {
+          actor: "system",
+          reservation_id: reservationId,
+          action: "reservation.affiliate_attribution.failed",
+          after_data: {
+            affiliate_link_slug: input.affiliate_link_slug ?? null,
+            affiliate_coupon_code: input.affiliate_coupon_code ?? null,
+            error_code: affErr.code,
+            error_message: affErr.message,
+          },
+          reason: "affiliate attribution UPDATE failed — needs manual backfill",
+        })
+      );
+    }
+    bookedRow.affiliate_link_slug = input.affiliate_link_slug ?? null;
+    bookedRow.affiliate_coupon_code = input.affiliate_coupon_code ?? null;
   }
 
   // 5a. Deposit-free path: row is already committed by the atomic RPC
@@ -319,4 +408,25 @@ export async function POST(req: NextRequest) {
 
 function errJson(error: ApiError, status: number) {
   return NextResponse.json({ ok: false, error }, { status });
+}
+
+/**
+ * True when the request carries a valid `Authorization: Bearer
+ * <AFFILIATE_S2S_SECRET>` — i.e. it came from the cast-affiliate app,
+ * not a public browser. Constant-time compare; returns false when the
+ * secret is unset (integration not yet wired) or the header is absent
+ * or malformed.
+ */
+function checkAffiliateBearer(req: NextRequest): boolean {
+  const secret = serverEnv().AFFILIATE_S2S_SECRET;
+  if (!secret) return false;
+  const header = req.headers.get("authorization") ?? "";
+  const prefix = "Bearer ";
+  if (!header.startsWith(prefix)) return false;
+  const presented = header.slice(prefix.length);
+  const a = Buffer.from(presented);
+  const b = Buffer.from(secret);
+  // timingSafeEqual throws on length mismatch — guard first.
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
