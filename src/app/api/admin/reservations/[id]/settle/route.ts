@@ -158,6 +158,7 @@ export async function POST(
       settlement_centavos:
         reservation.deposit_centavos + parsed.data.amount_centavos,
       guest_name: reservation.guest_name,
+      guest_phone: reservation.guest_phone,
       service_date: reservation.service_date,
       occurred_at: new Date().toISOString(),
     })

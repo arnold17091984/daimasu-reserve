@@ -132,8 +132,15 @@ export async function POST(req: NextRequest) {
   const balance = depositRequired ? breakdown.balance : totalCentavos;
   const depositPct = depositRequired ? settings.deposit_pct : 0;
 
-  // pre-issue an id so we can use it in the cancel-token + Stripe metadata
-  const reservationId = crypto.randomUUID();
+  // pre-issue an id so we can use it in the cancel-token + Stripe metadata.
+  // For affiliate-origin calls we honour a client-supplied UUID as the id
+  // so a retried POST (e.g. after a network timeout) collides on the
+  // primary key inside book_reservation_atomic instead of allocating a
+  // second seat. Public callers always get a fresh server-generated id.
+  const reservationId =
+    isAffiliateOrigin && input.reservation_id
+      ? input.reservation_id
+      : crypto.randomUUID();
 
   // P1-2 fix: bound token TTL to "service date + 7 days" instead of a flat 90 days,
   // so a leaked token from a forwarded email has a tight blast radius.
@@ -183,6 +190,32 @@ export async function POST(req: NextRequest) {
     if (bookErr?.message.includes("capacity_exceeded")) {
       return errJson({ code: "capacity_exceeded" }, 409);
     }
+    // Idempotent retry: a client-supplied reservation_id that already
+    // exists collides on the PK inside book_reservation_atomic. Treat it
+    // as success and return the existing row instead of a 500 — this is
+    // exactly the affiliate retry-after-timeout path, where booking twice
+    // would otherwise burn a second seat.
+    const isDuplicateId =
+      bookErr?.code === "23505" ||
+      (bookErr?.message.includes("duplicate key") ?? false);
+    if (isAffiliateOrigin && input.reservation_id && isDuplicateId) {
+      const { data: existing } = await sb
+        .from("reservations")
+        .select("*")
+        .eq("id", reservationId)
+        .single<Reservation>();
+      if (existing) {
+        return NextResponse.json(
+          {
+            ok: true,
+            reservation_id: reservationId,
+            confirmed: existing.status === "confirmed",
+            idempotent: true,
+          },
+          { status: 200 }
+        );
+      }
+    }
     return errJson({ code: "internal", reason: bookErr?.message ?? "book_failed" }, 500);
   }
   // seat_numbers is filled by the atomic RPC; surfaced for downstream
@@ -224,11 +257,31 @@ export async function POST(req: NextRequest) {
         affiliate_coupon_code: input.affiliate_coupon_code ?? null,
       })
       .eq("id", reservationId);
-    if (affErr && affErr.code !== "42703") {
+    if (affErr) {
+      // Attribution failed to persist — commission-critical. Settle /
+      // no-show webhooks read the slug off this row, so a silent loss
+      // here means the referring cast never gets paid. The booking is
+      // already committed and must NOT roll back, so instead record the
+      // failure durably in audit_log for manual backfill / reconciliation.
+      // Covers both 42703 (migration skew) and any transient DB error.
       console.warn(
         "[reservations] affiliate attribution update failed",
         affErr.code,
         affErr.message
+      );
+      after(() =>
+        auditInsert(sb, {
+          actor: "system",
+          reservation_id: reservationId,
+          action: "reservation.affiliate_attribution.failed",
+          after_data: {
+            affiliate_link_slug: input.affiliate_link_slug ?? null,
+            affiliate_coupon_code: input.affiliate_coupon_code ?? null,
+            error_code: affErr.code,
+            error_message: affErr.message,
+          },
+          reason: "affiliate attribution UPDATE failed — needs manual backfill",
+        })
       );
     }
     bookedRow.affiliate_link_slug = input.affiliate_link_slug ?? null;

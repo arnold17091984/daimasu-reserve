@@ -12,13 +12,19 @@
  * call POST /api/reservations). The affiliate receiver re-computes the
  * digest and constant-time-compares before trusting the payload.
  *
- * Fire-and-forget: failures are logged, never thrown — a settlement must
- * never be blocked by the affiliate app being down. Reconciliation for a
- * missed webhook is a separate concern (out of scope for v1).
+ * Delivery: the call is retried up to 3 times with backoff (the receiver
+ * is idempotent — keyed on the reservation id). A settlement must never
+ * be blocked or rolled back by the affiliate app being down, so the
+ * final failure is NOT thrown; instead it is recorded durably in
+ * audit_log (`affiliate.webhook.failed`) so an admin can detect a stuck
+ * commission and replay it. This keeps a durable trail without a full
+ * outbox/worker — sufficient for the single-bar deployment.
  */
 import "server-only";
 import { createHmac } from "node:crypto";
 import { serverEnv } from "@/lib/env";
+import { adminClient } from "@/lib/db/clients";
+import { auditInsert } from "@/lib/db/audit";
 
 export type AffiliateEvent =
   | {
@@ -28,6 +34,7 @@ export type AffiliateEvent =
       affiliate_coupon_code: string | null;
       settlement_centavos: number;
       guest_name: string;
+      guest_phone: string | null;
       service_date: string;
       occurred_at: string;
     }
@@ -37,15 +44,24 @@ export type AffiliateEvent =
       affiliate_link_slug: string | null;
       affiliate_coupon_code: string | null;
       guest_name: string;
+      guest_phone: string | null;
       service_date: string;
       occurred_at: string;
     };
+
+const MAX_ATTEMPTS = 3;
+const BACKOFF_MS = [1000, 3000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * POST a signed affiliate event. No-ops silently when the integration
  * isn't configured (no URL / no secret) or the reservation carries no
  * affiliate attribution. Safe to call unconditionally from settle /
- * no-show handlers.
+ * no-show handlers — best invoked via after() so the response is not
+ * blocked on the retry loop.
  */
 export async function notifyAffiliate(event: AffiliateEvent): Promise<void> {
   // Nothing to attribute — skip without touching the network.
@@ -59,38 +75,60 @@ export async function notifyAffiliate(event: AffiliateEvent): Promise<void> {
   const body = JSON.stringify(event);
   const signature = createHmac("sha256", secret).update(body).digest("hex");
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+  let lastError = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Affiliate-Signature": signature,
-        },
-        body,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        console.warn(
-          "[affiliate-webhook] non-2xx",
-          event.event,
-          event.reservation_id,
-          res.status
-        );
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Affiliate-Signature": signature,
+          },
+          body,
+          signal: controller.signal,
+        });
+        if (res.ok) return; // delivered
+        lastError = `non-2xx ${res.status}`;
+      } finally {
+        clearTimeout(timer);
       }
-    } finally {
-      clearTimeout(timer);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
-  } catch (err) {
-    // Affiliate app down / network blip — log and move on. The
-    // settlement itself is already committed.
     console.warn(
-      "[affiliate-webhook] send failed",
+      "[affiliate-webhook] attempt failed",
       event.event,
       event.reservation_id,
-      err instanceof Error ? err.message : String(err)
+      `${attempt}/${MAX_ATTEMPTS}`,
+      lastError
+    );
+    if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
+  }
+
+  // All attempts exhausted. The settlement itself is already committed;
+  // record a durable, admin-visible failure so the commission can be
+  // reconciled / the webhook replayed manually.
+  try {
+    await auditInsert(adminClient(), {
+      actor: "system",
+      reservation_id: event.reservation_id,
+      action: "affiliate.webhook.failed",
+      after_data: {
+        event: event.event,
+        affiliate_link_slug: event.affiliate_link_slug,
+        affiliate_coupon_code: event.affiliate_coupon_code,
+        last_error: lastError,
+      },
+      reason: `affiliate webhook delivery failed after ${MAX_ATTEMPTS} attempts — needs manual replay`,
+    });
+  } catch (err) {
+    console.error(
+      "[affiliate-webhook] failed to record delivery failure in audit_log",
+      event.reservation_id,
+      err
     );
   }
 }

@@ -39,6 +39,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   }
   const row = data[0] as {
     guest_name: string;
+    guest_phone: string;
     service_date: string;
     affiliate_link_slug?: string | null;
     affiliate_coupon_code?: string | null;
@@ -61,6 +62,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       affiliate_link_slug: row.affiliate_link_slug ?? null,
       affiliate_coupon_code: row.affiliate_coupon_code ?? null,
       guest_name: row.guest_name,
+      guest_phone: row.guest_phone,
       service_date: row.service_date,
       occurred_at: new Date().toISOString(),
     })
