@@ -103,6 +103,13 @@ export interface Reservation {
    * 2026-05-06 — see migration 0018_dietary.sql.
    */
   dietary: DietaryInfo | null;
+  /**
+   * Cast-affiliate attribution. Set when the booking came in through the
+   * affiliate app (POST /api/reservations with the S2S bearer). NULL for
+   * direct public bookings. See migration 0021_affiliate_attribution.sql.
+   */
+  affiliate_link_slug: string | null;
+  affiliate_coupon_code: string | null;
   course_price_centavos: number;
   deposit_pct: number;
   total_centavos: number;

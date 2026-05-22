@@ -112,6 +112,12 @@ export const createReservationSchema = z.object({
   // `if (input.website && input.website.length > 0)` branch returns the
   // bot-tarpit fake-200.
   website: z.string().max(2048).optional(),
+  // Cast-affiliate attribution — only honoured on S2S (bearer-authed)
+  // calls from the affiliate app; ignored on ordinary public submits.
+  // 8-char nanoid slug / 8-char coupon code, kept loose here and
+  // length-capped so a junk value can't bloat the row.
+  affiliate_link_slug: z.string().min(1).max(32).optional(),
+  affiliate_coupon_code: z.string().min(1).max(32).optional(),
 });
 
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;

@@ -5,11 +5,12 @@
  * Idempotent on idempotency_key derived from reservation id.
  */
 import "server-only";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { adminClient } from "@/lib/db/clients";
 import { getAdmin } from "@/lib/auth/admin";
 import { receiptBreakdown } from "@/lib/domain/reservation";
+import { notifyAffiliate } from "@/lib/notifications/affiliate-webhook";
 import type { Reservation } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -143,6 +144,24 @@ export async function POST(
       or_number,
     } as never,
   });
+
+  // Notify the cast-affiliate app so the referring cast's commission can
+  // confirm off this real settlement. No-ops unless the reservation
+  // carries affiliate attribution and the webhook is configured. Pushed
+  // into after() so a slow/down affiliate app never delays this response.
+  after(() =>
+    notifyAffiliate({
+      event: "reservation.settled",
+      reservation_id: id,
+      affiliate_link_slug: reservation.affiliate_link_slug ?? null,
+      affiliate_coupon_code: reservation.affiliate_coupon_code ?? null,
+      settlement_centavos:
+        reservation.deposit_centavos + parsed.data.amount_centavos,
+      guest_name: reservation.guest_name,
+      service_date: reservation.service_date,
+      occurred_at: new Date().toISOString(),
+    })
+  );
 
   return NextResponse.json({ ok: true, or_number });
 }
