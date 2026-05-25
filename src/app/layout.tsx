@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Cinzel, Cormorant_Garamond, Inter, Noto_Sans_JP, Noto_Serif_JP, Shippori_Mincho } from "next/font/google";
 import "./globals.css";
+
+// Google Ads conversion tracking. Loaded site-wide via next/script with
+// the afterInteractive strategy so it doesn't block the first paint of
+// the reservation form. ID is the Google Ads property issued for the
+// DAIMASU campaign — there is no PII in the tag, so it's safe to inline.
+const GOOGLE_ADS_TAG_ID = "AW-18188110458";
 
 // Inter: SaaS-standard for /admin (Linear / Stripe / Vercel / GitHub).
 // Latin only — Japanese falls back to Noto Sans JP via the admin font stack.
@@ -211,6 +218,21 @@ export default function RootLayout({
       </head>
       <body className="font-serif antialiased">
         {children}
+        {/* Google Ads (gtag.js) — afterInteractive defers the network
+            request past first paint while still firing before the user
+            can hit Reserve, so page-view conversions still register. */}
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_TAG_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GOOGLE_ADS_TAG_ID}');
+          `}
+        </Script>
       </body>
     </html>
   );
