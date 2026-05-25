@@ -196,15 +196,27 @@ function dietaryBlock(r: Reservation, lang: "ja" | "en"): string {
   </div>`;
 }
 
-function summaryTable(r: Reservation, lang: "ja" | "en"): string {
-  // Two modes:
-  //  - Stripe-deposit mode (r.deposit_centavos > 0): show the actual
-  //    paid deposit + balance.
-  //  - Manual-deposit mode (r.deposit_centavos === 0): the seat is
-  //    confirmed but the 50% deposit hasn't been collected yet — staff
-  //    follows up out-of-band. Render the implied 50% so the guest
-  //    sees the obligation and a separate "Balance on arrival" line.
+type SummaryContext = "confirm" | "cancel";
+
+function summaryTable(
+  r: Reservation,
+  lang: "ja" | "en",
+  context: SummaryContext = "confirm"
+): string {
+  // Three modes:
+  //  - Stripe-deposit (r.deposit_centavos > 0): show the actual paid
+  //    deposit + balance.
+  //  - Manual-deposit + confirm context (deposit_centavos === 0): the
+  //    seat is confirmed but the 50% deposit hasn't been collected;
+  //    surface the implied half-and-half so the obligation matches
+  //    the form copy.
+  //  - Manual-deposit + cancel context: the booking has been cancelled
+  //    — no further payment obligation. Render a plain "Course total"
+  //    line so the cancellation email doesn't re-promise a 50% deposit
+  //    nor a "Balance on arrival" after the guest already cancelled.
   const depositFree = r.deposit_centavos === 0;
+  const cancelled = context === "cancel";
+
   const labels =
     lang === "ja"
       ? {
@@ -216,6 +228,7 @@ function summaryTable(r: Reservation, lang: "ja" | "en"): string {
             ? "50% デポジット (スタッフよりご連絡)"
             : "デポジット (お支払い済)",
           balance: "残金 (当日お支払い)",
+          totalLine: "合計",
         }
       : {
           name: "Name",
@@ -226,11 +239,9 @@ function summaryTable(r: Reservation, lang: "ja" | "en"): string {
             ? "50% deposit (staff will contact)"
             : "Deposit (paid)",
           balance: "Balance on arrival",
+          totalLine: "Total",
         };
 
-  // In manual mode the row stores deposit=0 / balance=total; surface
-  // the half-and-half split the guest actually owes so the obligation
-  // matches the form copy.
   const impliedDeposit = depositFree
     ? Math.floor(r.total_centavos / 2)
     : r.deposit_centavos;
@@ -241,13 +252,20 @@ function summaryTable(r: Reservation, lang: "ja" | "en"): string {
   const row = (k: string, v: string) =>
     `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;letter-spacing:0.04em;">${k}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${v}</td></tr>`;
 
+  // Cancellation summary collapses the deposit/balance split into a
+  // single total — the refundLine in the cancel email already explains
+  // what (if anything) is being returned.
+  const paymentRows = cancelled
+    ? row(labels.totalLine, formatPHP(r.total_centavos, lang))
+    : `${row(labels.deposit, formatPHP(impliedDeposit, lang))}
+       ${row(labels.balance, formatPHP(impliedBalance, lang))}`;
+
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${PALETTE.border};border-bottom:1px solid ${PALETTE.border};margin:16px 0;">
     ${row(labels.name, escapeHtml(r.guest_name))}
     ${row(labels.date, dateLine(r, lang))}
     ${row(labels.party, `${r.party_size}`)}
     ${row(labels.course, formatPHP(r.course_price_centavos, lang))}
-    ${row(labels.deposit, formatPHP(impliedDeposit, lang))}
-    ${row(labels.balance, formatPHP(impliedBalance, lang))}
+    ${paymentRows}
   </table>`;
 }
 
@@ -327,18 +345,27 @@ export function renderCancelEmail(args: CancelledArgs): { subject: string; html:
       ? `【DAIMASU 大桝 BAR】キャンセルを承りました`
       : `DAIMASU Reservation Cancelled`;
 
+  // In Stripe-deposit mode the refund is processed through Stripe.
+  // In manual-deposit mode there's no Stripe charge to reverse, and
+  // any deposit collected out-of-band must be refunded the same way —
+  // so the wording shifts to "staff will be in touch."
+  const stripeMode = r.deposit_centavos > 0;
   const refundLine =
     args.refundCentavos > 0
-      ? lang === "ja"
-        ? `${formatPHP(args.refundCentavos, lang)} を Stripe より返金処理いたしました (5–10 営業日でお戻りいたします)。`
-        : `A refund of ${formatPHP(args.refundCentavos, lang)} has been issued via Stripe (typically 5–10 business days).`
+      ? stripeMode
+        ? lang === "ja"
+          ? `${formatPHP(args.refundCentavos, lang)} を Stripe より返金処理いたしました (5–10 営業日でお戻りいたします)。`
+          : `A refund of ${formatPHP(args.refundCentavos, lang)} has been issued via Stripe (typically 5–10 business days).`
+        : lang === "ja"
+          ? `デポジットをお支払いいただいている場合は、スタッフより返金 (${formatPHP(args.refundCentavos, lang)}) のお手続きをご連絡させていただきます。`
+          : `If a deposit was already collected, our staff will be in touch about the refund (${formatPHP(args.refundCentavos, lang)}).`
       : lang === "ja"
         ? `恐れ入りますが、当日キャンセルにつき返金はございません。`
         : `As this is a same-day cancellation, no refund is issued per our policy.`;
 
   const body = `<h1 style="margin:0 0 8px;font-size:22px;font-weight:500;letter-spacing:0.04em;">${lang === "ja" ? "キャンセルを承りました" : "Reservation cancelled"}</h1>
     <p style="margin:0 0 16px;font-size:13px;color:${PALETTE.textMuted};">${escapeHtml(r.guest_name)} 様</p>
-    ${summaryTable(r, lang)}
+    ${summaryTable(r, lang, "cancel")}
     <p style="margin:16px 0 0;font-size:13px;color:${PALETTE.text};line-height:1.7;">${refundLine}</p>
     <p style="margin:16px 0 0;font-size:12px;color:${PALETTE.textMuted};line-height:1.7;">${lang === "ja" ? "またのご来店を心よりお待ちしております。" : "We hope to welcome you another time."}</p>`;
 
