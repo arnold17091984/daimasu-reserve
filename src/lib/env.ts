@@ -92,6 +92,12 @@ const schema = z.object({
   // mark-no-show POST a signed event so the cast's commission can
   // confirm off the real reservation lifecycle.
   AFFILIATE_WEBHOOK_URL: z.string().url().optional(),
+  // Receiver for the attribution event fired when a public-flow
+  // reservation is created with the daimasu_aff_token cookie. Kept as
+  // a separate env var (not regex-derived from AFFILIATE_WEBHOOK_URL)
+  // so a path-suffix mismatch can't silently double-post to the
+  // settle receiver, which would 400 on schema and lose the event.
+  AFFILIATE_ATTRIBUTION_WEBHOOK_URL: z.string().url().optional(),
 
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });

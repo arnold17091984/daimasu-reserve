@@ -36,6 +36,7 @@ import {
 import { serverEnv, isDepositRequired } from "@/lib/env";
 import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
 import { notifyAffiliateAttribution } from "@/lib/notifications/affiliate-webhook";
+import { verifyAffiliateToken } from "@/lib/security/affiliate-token";
 import { auditInsert } from "@/lib/db/audit";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
@@ -282,17 +283,15 @@ export async function POST(req: NextRequest) {
   // Persist cast-affiliate attribution.
   // Two trusted sources:
   //  - S2S bearer caller (legacy path): JSON body fields.
-  //  - Public caller carrying the `daimasu_aff_slug` cookie set by the
-  //    affiliate /r/[slug] redirect. Cookie is parent-domain
-  //    (.daimasu.com.ph) so it survives the redirect from
-  //    affiliate.daimasu.com.ph → reserve.daimasu.com.ph. We trust it
-  //    only as a lookup key; the affiliate webhook will reject any
-  //    unknown / suspended slug. A public caller can stuff cookies,
-  //    but the worst they can do is mis-attribute a single booking to
-  //    a real cast — no money escapes affiliate's own validation.
+  //  - Public caller carrying a SIGNED `daimasu_aff_token` cookie
+  //    issued by the affiliate /r/[slug] redirect. The token is
+  //    HMAC-signed with AFFILIATE_S2S_SECRET (shared); without the
+  //    secret, a guest cannot forge a cookie that survives
+  //    verifyAffiliateToken — so the cookie can no longer be used to
+  //    pocket commission on bookings the cast never referred.
   const cookieSlug = isAffiliateOrigin
     ? null
-    : req.cookies.get("daimasu_aff_slug")?.value ?? null;
+    : verifyAffiliateToken(req.cookies.get("daimasu_aff_token")?.value);
   const attributedSlug =
     (isAffiliateOrigin ? input.affiliate_link_slug : cookieSlug) ?? null;
   const attributedCoupon = isAffiliateOrigin

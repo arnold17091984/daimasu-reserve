@@ -154,9 +154,22 @@ export type AffiliateAttributionEvent = {
   occurred_at: string;
 };
 
-function deriveAttributionUrl(settledUrl: string): string {
-  // settledUrl ends with "/reserve-settled"; swap for "/reserve-attribution".
-  return settledUrl.replace(/\/reserve-settled\/?$/, "/reserve-attribution");
+function deriveAttributionUrl(settledUrl: string): string | null {
+  // Prefer an explicit env-var so a path-suffix mismatch can't
+  // silently re-point the event at the settle receiver (Codex MEDIUM).
+  // Fall back to regex-substitution only when the explicit URL is
+  // absent AND the settled URL matches the expected suffix exactly.
+  const env = serverEnv();
+  if (env.AFFILIATE_ATTRIBUTION_WEBHOOK_URL) {
+    return env.AFFILIATE_ATTRIBUTION_WEBHOOK_URL;
+  }
+  if (/\/reserve-settled\/?$/.test(settledUrl)) {
+    return settledUrl.replace(/\/reserve-settled\/?$/, "/reserve-attribution");
+  }
+  console.warn(
+    "[affiliate-attribution] cannot derive receiver URL — set AFFILIATE_ATTRIBUTION_WEBHOOK_URL",
+  );
+  return null;
 }
 
 export async function notifyAffiliateAttribution(args: {
@@ -185,6 +198,7 @@ export async function notifyAffiliateAttribution(args: {
   const body = JSON.stringify(event);
   const signature = createHmac("sha256", secret).update(body).digest("hex");
   const target = deriveAttributionUrl(url);
+  if (!target) return; // misconfigured — already warned above
 
   let lastError = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
