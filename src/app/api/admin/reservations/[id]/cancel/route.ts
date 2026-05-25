@@ -105,7 +105,8 @@ export async function POST(
     auditReason = `staff cancel via /admin, ${Math.round(hours * 10) / 10}h remaining`;
   }
 
-  // Stripe refund (if any).
+  // Stripe refund (if any). provider_ref is null for owner-manual
+  // cash deposits — same source-of-truth as the guest cancel route.
   const { data: depositPayment } = await sb
     .from("payments")
     .select("provider_ref")
@@ -113,6 +114,9 @@ export async function POST(
     .eq("kind", "deposit_capture")
     .limit(1)
     .maybeSingle<{ provider_ref: string | null }>();
+  const hasStripeDeposit = Boolean(
+    reservation.deposit_centavos > 0 && depositPayment?.provider_ref
+  );
 
   const minuteBucket = Math.floor(Date.now() / 60_000);
   let stripeRefundId: string | null = null;
@@ -146,6 +150,10 @@ export async function POST(
   }
 
   // Payment row (negative amount). Override gets manual_adjustment kind.
+  // provider mirrors the original deposit channel: Stripe when the
+  // refund actually went through Stripe; on_site when the original
+  // deposit was cash and the refund still needs to be handed back by
+  // hand. Mirrors the guest cancel route — keeps the ledger honest.
   if (refundCentavos > 0) {
     const kind = parsed.data.override
       ? "manual_adjustment"
@@ -155,7 +163,7 @@ export async function POST(
     await sb.from("payments").insert({
       reservation_id: reservation.id,
       kind,
-      provider: "stripe",
+      provider: hasStripeDeposit ? "stripe" : "on_site",
       amount_centavos: -refundCentavos,
       method: null,
       provider_ref: stripeRefundId,
