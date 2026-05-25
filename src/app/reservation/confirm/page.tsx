@@ -133,8 +133,8 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
               <Wallet size={18} className="mt-0.5 flex-shrink-0 text-gold" aria-hidden="true" />
               <p className="text-[12px] leading-relaxed text-text-secondary">
                 {t(
-                  "お席の確保にはコース料金の 50% のデポジットが必要です。お支払い手続き（銀行振込 / GCash / カウンターでの現金など）は、ご予約確認のスタッフより別途ご連絡させていただきます。",
-                  "A 50% deposit of the course price is required to hold your seat. Our staff will contact you separately about the payment procedure (bank transfer / GCash / cash at the counter)."
+                  "お席の確保にはコース料金の 50% のデポジットを頂戴しております。これはプレミアムダイニングや特別な機会のご予約では一般的な仕組みで、本気でご来店をお考えのお客様のためにお席をお守りするためのものです。お支払い手続き（銀行振込 / GCash / カウンターでの現金など）は、スタッフより別途ご連絡させていただきます。",
+                  "A 50% deposit of the course price secures your seat — a quality-control measure standard to premium dining and special-occasion bookings, ensuring your counter seat is held for you. Our staff will contact you separately about the payment procedure (bank transfer / GCash / cash at the counter)."
                 )}
               </p>
             </div>

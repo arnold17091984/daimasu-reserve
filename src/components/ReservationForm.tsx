@@ -364,8 +364,8 @@ export default function ReservationForm() {
                 "Pick a date, a seating, and party size. A 50% deposit secures your seat; a confirmation email arrives instantly."
               )
             : t(
-                "ご希望の日・時間・人数をお選びください。送信と同時にご予約は確定となり、確認メールが即時に届きます。お席は仮押さえされておりますので、コース料金の 50% のデポジットお支払い手続きについては、スタッフより別途ご連絡させていただきます (銀行振込 / GCash / カウンターでの現金など)。",
-                "Pick a date, a seating, and party size. Your reservation is confirmed on submission and a confirmation email arrives instantly. Your seat is held; our staff will be in touch separately about the 50% deposit payment (bank transfer / GCash / cash at the counter)."
+                "ご希望の日・時間・人数をお選びください。送信と同時にご予約は確定となり、確認メールが即時に届きます。お席の確保にはコース料金の 50% のデポジットを頂戴しております。これは本気でご来店をお考えのお客様のためにお席をしっかりとお守りする仕組みで、プレミアムダイニングや特別な機会のご予約では広く採用されているものです。お支払い手続き (銀行振込 / GCash / カウンターでの現金など) は、スタッフより別途ご連絡させていただきます。",
+                "Pick a date, a seating, and party size. Your reservation is confirmed on submission and a confirmation email arrives instantly. A 50% deposit secures your seat — a quality-control measure that protects genuine reservations and is standard practice for premium dining and special-occasion bookings. Our staff will be in touch separately about the payment procedure (bank transfer / GCash / cash at the counter)."
               )}
         </p>
         {/* Plain-language summary for guests who haven't experienced
@@ -844,8 +844,8 @@ export default function ReservationForm() {
                     "Next: pay a 50% deposit via Stripe. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
                   )
                 : t(
-                    "送信と同時にご予約は確定し、確認メールが即時に届きます。コース料金の 50% のデポジットお支払い手続き (銀行振込 / GCash / カウンター現金など) は、スタッフより別途ご連絡させていただきます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
-                    "Your reservation is confirmed on submission and a confirmation email arrives instantly. Our staff will be in touch separately about the 50% deposit payment procedure (bank transfer / GCash / cash at the counter). The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
+                    "送信と同時にご予約は確定し、確認メールが即時に届きます。お席の確保にはコース料金の 50% のデポジットを頂戴しております——プレミアムダイニングや特別な機会のご予約では一般的な仕組みで、本気でご来店をお考えのお客様のためにお席をお守りするためのものです。お支払い手続き (銀行振込 / GCash / カウンター現金など) は、スタッフより別途ご連絡させていただきます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
+                    "Your reservation is confirmed on submission and a confirmation email arrives instantly. A 50% deposit of the course price secures your seat — a quality-control measure standard to premium dining and special-occasion bookings, ensuring the counter is held for guests who genuinely intend to dine with us. Our staff will be in touch separately about the payment procedure (bank transfer / GCash / cash at the counter). The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
                   )}
             </p>
             <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
