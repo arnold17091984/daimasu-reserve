@@ -197,10 +197,13 @@ function dietaryBlock(r: Reservation, lang: "ja" | "en"): string {
 }
 
 function summaryTable(r: Reservation, lang: "ja" | "en"): string {
-  // Deposit-free mode (no Stripe charge taken at booking) — drop the
-  // "Deposit" row (always ₱0) and rename Balance to "Total on arrival"
-  // so the guest understands that no payment was taken yet. UX 2026-05-06
-  // (Persona Western traveller) flagged the previous wording as ambiguous.
+  // Two modes:
+  //  - Stripe-deposit mode (r.deposit_centavos > 0): show the actual
+  //    paid deposit + balance.
+  //  - Manual-deposit mode (r.deposit_centavos === 0): the seat is
+  //    confirmed but the 50% deposit hasn't been collected yet — staff
+  //    follows up out-of-band. Render the implied 50% so the guest
+  //    sees the obligation and a separate "Balance on arrival" line.
   const depositFree = r.deposit_centavos === 0;
   const labels =
     lang === "ja"
@@ -209,17 +212,31 @@ function summaryTable(r: Reservation, lang: "ja" | "en"): string {
           date: "ご来店日時",
           party: "人数",
           course: "コース",
-          deposit: "デポジット (お支払い済)",
-          balance: depositFree ? "当日お支払い (合計)" : "当日お支払い",
+          deposit: depositFree
+            ? "50% デポジット (スタッフよりご連絡)"
+            : "デポジット (お支払い済)",
+          balance: "残金 (当日お支払い)",
         }
       : {
           name: "Name",
           date: "Date / time",
           party: "Party",
           course: "Course",
-          deposit: "Deposit (paid)",
-          balance: depositFree ? "Total on arrival" : "Balance on arrival",
+          deposit: depositFree
+            ? "50% deposit (staff will contact)"
+            : "Deposit (paid)",
+          balance: "Balance on arrival",
         };
+
+  // In manual mode the row stores deposit=0 / balance=total; surface
+  // the half-and-half split the guest actually owes so the obligation
+  // matches the form copy.
+  const impliedDeposit = depositFree
+    ? Math.floor(r.total_centavos / 2)
+    : r.deposit_centavos;
+  const impliedBalance = depositFree
+    ? r.total_centavos - impliedDeposit
+    : r.balance_centavos;
 
   const row = (k: string, v: string) =>
     `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;letter-spacing:0.04em;">${k}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${v}</td></tr>`;
@@ -229,9 +246,28 @@ function summaryTable(r: Reservation, lang: "ja" | "en"): string {
     ${row(labels.date, dateLine(r, lang))}
     ${row(labels.party, `${r.party_size}`)}
     ${row(labels.course, formatPHP(r.course_price_centavos, lang))}
-    ${depositFree ? "" : row(labels.deposit, formatPHP(r.deposit_centavos, lang))}
-    ${row(labels.balance, formatPHP(r.balance_centavos, lang))}
+    ${row(labels.deposit, formatPHP(impliedDeposit, lang))}
+    ${row(labels.balance, formatPHP(impliedBalance, lang))}
   </table>`;
+}
+
+function manualDepositNotice(r: Reservation, lang: "ja" | "en"): string {
+  // Only shown when the booking is in manual-deposit mode (no Stripe
+  // charge taken). Tells the guest what to expect next: staff will
+  // reach out with payment instructions. Keeping it adjacent to the
+  // summary so it can't be missed when scanning the email.
+  if (r.deposit_centavos > 0) return "";
+  const copy =
+    lang === "ja"
+      ? `<strong style="color:${PALETTE.goldSoft};">デポジットのご案内:</strong>
+         お席の確保にはコース料金の 50% のデポジットが必要です。お支払い手続き
+         (銀行振込 / GCash / カウンターでの現金など) は、ご予約確認のスタッフより
+         別途ご連絡させていただきます。`
+      : `<strong style="color:${PALETTE.goldSoft};">Deposit follow-up:</strong>
+         A 50% deposit of the course price is required to hold your seat.
+         Our staff will be in touch separately about the payment procedure
+         (bank transfer / GCash / cash at the counter).`;
+  return `<p style="margin:8px 0 0;padding:12px 16px;border:1px solid ${PALETTE.border};background:${PALETTE.surface};font-size:12px;color:${PALETTE.textMuted};line-height:1.7;">${copy}</p>`;
 }
 
 export function renderConfirmEmail(args: ConfirmArgs): { subject: string; html: string } {
@@ -273,6 +309,7 @@ export function renderConfirmEmail(args: ConfirmArgs): { subject: string; html: 
       subject,
       greeting +
         summaryTable(r, lang) +
+        manualDepositNotice(r, lang) +
         dietaryBlock(r, lang) +
         venueBlock(lang) +
         policy +

@@ -106,13 +106,39 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
                 />
               </>
             ) : (
-              <Row
-                icon={<Wallet size={16} aria-hidden="true" />}
-                label={t("当日お支払い", "Payment on arrival")}
-                value={formatPHP(reservation.total_centavos, lang)}
-              />
+              <>
+                <Row
+                  icon={<Wallet size={16} aria-hidden="true" />}
+                  label={t("50% デポジット (お支払い手続きはスタッフよりご連絡)", "50% deposit (staff will contact)")}
+                  value={formatPHP(Math.floor(reservation.total_centavos / 2), lang)}
+                />
+                <Row
+                  icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}
+                  label={t("当日お支払い", "Balance on arrival")}
+                  value={formatPHP(
+                    reservation.total_centavos - Math.floor(reservation.total_centavos / 2),
+                    lang
+                  )}
+                />
+              </>
             )}
           </dl>
+
+          {/* Deposit-pending note for the manual-collection path. The
+              booking is confirmed at the system level but the deposit
+              hasn't been collected yet — make that obligation explicit
+              so the guest knows to expect staff outreach. */}
+          {!depositFlow && (
+            <div className="mt-6 flex items-start gap-3 border border-gold/30 bg-gold/[0.04] p-4">
+              <Wallet size={18} className="mt-0.5 flex-shrink-0 text-gold" aria-hidden="true" />
+              <p className="text-[12px] leading-relaxed text-text-secondary">
+                {t(
+                  "お席の確保にはコース料金の 50% のデポジットが必要です。お支払い手続き（銀行振込 / GCash / カウンターでの現金など）は、ご予約確認のスタッフより別途ご連絡させていただきます。",
+                  "A 50% deposit of the course price is required to hold your seat. Our staff will contact you separately about the payment procedure (bank transfer / GCash / cash at the counter)."
+                )}
+              </p>
+            </div>
+          )}
 
           {/* policy */}
           <div className="mt-10 border-t border-border pt-6">
@@ -126,8 +152,8 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
                     `${settings?.refund_full_hours ?? 48}h+ before arrival: 100% refund. ${settings?.refund_partial_hours ?? 24}h+: 50%. Less: 0%. Manage via the link in your confirmation email.`
                   )
                 : t(
-                    "ご都合が変わった場合、確認メール内のキャンセルリンクから 24 時間 365 日承ります。お支払いは当日現地のため返金処理はございません。",
-                    "Plans change — cancel any time via the link in your confirmation email. Since payment is on-site there is no refund step."
+                    `ご都合が変わった場合、確認メール内のキャンセルリンクから 24 時間 365 日承ります。${settings?.refund_full_hours ?? 48} 時間前まで 100% / ${settings?.refund_partial_hours ?? 24} 時間前まで 50% のデポジット返金（既にお支払い済みの場合）。`,
+                    `Plans change — cancel any time via the link in your confirmation email. Deposit (if already paid) is refunded 100% up to ${settings?.refund_full_hours ?? 48}h before, 50% up to ${settings?.refund_partial_hours ?? 24}h.`
                   )}
             </p>
           </div>

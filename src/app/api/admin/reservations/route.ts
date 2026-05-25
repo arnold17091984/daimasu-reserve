@@ -13,7 +13,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { getAdmin } from "@/lib/auth/admin";
 import { adminCreateReservationSchema } from "@/lib/domain/schemas";
-import { serviceStartsAt, priceBreakdown } from "@/lib/domain/reservation";
+import {
+  serviceStartsAt,
+  priceBreakdown,
+  isClosedWeekday,
+} from "@/lib/domain/reservation";
 import { issueCancelToken } from "@/lib/security/cancel-token";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
@@ -48,6 +52,16 @@ export async function POST(req: NextRequest) {
     );
   }
   const input = parsed.data;
+
+  // Same standing-Monday-closure guard the public route enforces.
+  // Stale admin tabs / future admin UIs / hand-crafted requests can't
+  // slip a Monday booking past the grid disable.
+  if (isClosedWeekday(input.service_date)) {
+    return NextResponse.json(
+      { ok: false, error: { code: "closed_date" } },
+      { status: 409 }
+    );
+  }
 
   const sb = adminClient();
   const { data: settings } = await sb
