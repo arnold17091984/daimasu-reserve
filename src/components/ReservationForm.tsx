@@ -837,36 +837,43 @@ export default function ReservationForm() {
           {/* Deposit notice (deposit flow) — booking-policy notice (deposit-free flow) */}
           <div className="flex items-start gap-3 border border-gold/30 bg-gold/[0.04] p-4">
             <ShieldCheck size={18} className="mt-0.5 flex-shrink-0 text-gold" aria-hidden="true" />
-            <p className="text-[12px] leading-relaxed text-text-secondary">
-              {DEPOSIT_REQUIRED
-                ? t(
-                    "次の画面で 50% デポジットのお支払い (Stripe) に進みます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
-                    "Next: pay a 50% deposit via Stripe. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
-                  )
-                : t(
-                    "送信と同時にご予約は確定し、確認メールが即時に届きます。お席の確保にはコース料金の 50% のデポジットを頂戴しております——プレミアムダイニングや特別な機会のご予約では一般的な仕組みで、本気でご来店をお考えのお客様のためにお席をお守りするためのものです。お支払い手続き (銀行振込 / GCash / カウンター現金など) は、スタッフより別途ご連絡させていただきます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
-                    "Your reservation is confirmed on submission and a confirmation email arrives instantly. A 50% deposit of the course price secures your seat — a quality-control measure standard to premium dining and special-occasion bookings, ensuring the counter is held for guests who genuinely intend to dine with us. Our staff will be in touch separately about the payment procedure (bank transfer / GCash / cash at the counter). The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
-                  )}
-            </p>
-            <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
-              {t(
-                <>
-                  ご予約に進むことで、
-                  <a href="/terms" className="text-gold underline underline-offset-2">ご予約規約</a>
-                  と
-                  <a href="/privacy" className="text-gold underline underline-offset-2">プライバシーポリシー</a>
-                  に同意したものとみなされます。
-                </>,
-                <>
-                  By proceeding, you agree to our
-                  {" "}
-                  <a href="/terms" className="text-gold underline underline-offset-2">Terms of Service</a>
-                  {" "} and {" "}
-                  <a href="/privacy" className="text-gold underline underline-offset-2">Privacy Policy</a>
-                  .
-                </>
-              )}
-            </p>
+            {/* Stack the long deposit copy and the short terms-agreement
+                line vertically inside the same notice — the previous
+                flex-row layout pushed the terms text into a narrow
+                second column and looked unbalanced once the deposit
+                copy grew long. */}
+            <div className="flex min-w-0 flex-col gap-3">
+              <p className="text-[12px] leading-relaxed text-text-secondary">
+                {DEPOSIT_REQUIRED
+                  ? t(
+                      "次の画面で 50% デポジットのお支払い (Stripe) に進みます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
+                      "Next: pay a 50% deposit via Stripe. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
+                    )
+                  : t(
+                      "送信と同時にご予約は確定し、確認メールが即時に届きます。お席の確保にはコース料金の 50% のデポジットを頂戴しております——プレミアムダイニングや特別な機会のご予約では一般的な仕組みで、本気でご来店をお考えのお客様のためにお席をお守りするためのものです。お支払い手続き (銀行振込 / GCash / カウンター現金など) は、スタッフより別途ご連絡させていただきます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
+                      "Your reservation is confirmed on submission and a confirmation email arrives instantly. A 50% deposit of the course price secures your seat — a quality-control measure standard to premium dining and special-occasion bookings, ensuring the counter is held for guests who genuinely intend to dine with us. Our staff will be in touch separately about the payment procedure (bank transfer / GCash / cash at the counter). The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
+                    )}
+              </p>
+              <p className="text-[11px] leading-relaxed text-text-muted">
+                {t(
+                  <>
+                    ご予約に進むことで、
+                    <a href="/terms" className="text-gold underline underline-offset-2">ご予約規約</a>
+                    と
+                    <a href="/privacy" className="text-gold underline underline-offset-2">プライバシーポリシー</a>
+                    に同意したものとみなされます。
+                  </>,
+                  <>
+                    By proceeding, you agree to our
+                    {" "}
+                    <a href="/terms" className="text-gold underline underline-offset-2">Terms of Service</a>
+                    {" "} and {" "}
+                    <a href="/privacy" className="text-gold underline underline-offset-2">Privacy Policy</a>
+                    .
+                  </>
+                )}
+              </p>
+            </div>
           </div>
 
           <button
