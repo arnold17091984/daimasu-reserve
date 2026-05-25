@@ -154,17 +154,18 @@ export type AffiliateAttributionEvent = {
   occurred_at: string;
 };
 
-function deriveAttributionUrl(settledUrl: string): string | null {
-  // Prefer an explicit env-var so a path-suffix mismatch can't
-  // silently re-point the event at the settle receiver (Codex MEDIUM).
-  // Fall back to regex-substitution only when the explicit URL is
-  // absent AND the settled URL matches the expected suffix exactly.
+function resolveAttributionUrl(): string | null {
+  // Prefer the explicit env-var. Fall back to regex-substitution of
+  // the settle URL only when the explicit URL is absent AND the
+  // settle URL matches the expected suffix exactly. The explicit URL
+  // works even when AFFILIATE_WEBHOOK_URL is unset (Codex pass 2).
   const env = serverEnv();
   if (env.AFFILIATE_ATTRIBUTION_WEBHOOK_URL) {
     return env.AFFILIATE_ATTRIBUTION_WEBHOOK_URL;
   }
-  if (/\/reserve-settled\/?$/.test(settledUrl)) {
-    return settledUrl.replace(/\/reserve-settled\/?$/, "/reserve-attribution");
+  const settled = env.AFFILIATE_WEBHOOK_URL;
+  if (settled && /\/reserve-settled\/?$/.test(settled)) {
+    return settled.replace(/\/reserve-settled\/?$/, "/reserve-attribution");
   }
   console.warn(
     "[affiliate-attribution] cannot derive receiver URL — set AFFILIATE_ATTRIBUTION_WEBHOOK_URL",
@@ -180,10 +181,14 @@ export async function notifyAffiliateAttribution(args: {
   readonly partySize: number;
   readonly reservedFor: string;
 }): Promise<void> {
+  // Attribution can be configured independently of the settle webhook —
+  // either env var alone is enough. Gating on AFFILIATE_WEBHOOK_URL up
+  // front meant a deploy that set only the attribution URL silently
+  // no-op'd (Codex pass 2 MEDIUM).
   const env = serverEnv();
-  const url = env.AFFILIATE_WEBHOOK_URL;
   const secret = env.AFFILIATE_S2S_SECRET;
-  if (!url || !secret) return;
+  const target = resolveAttributionUrl();
+  if (!secret || !target) return;
 
   const event: AffiliateAttributionEvent = {
     event: "reservation.attributed",
@@ -197,8 +202,6 @@ export async function notifyAffiliateAttribution(args: {
   };
   const body = JSON.stringify(event);
   const signature = createHmac("sha256", secret).update(body).digest("hex");
-  const target = deriveAttributionUrl(url);
-  if (!target) return; // misconfigured — already warned above
 
   let lastError = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

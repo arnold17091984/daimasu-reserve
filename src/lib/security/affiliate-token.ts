@@ -18,7 +18,12 @@
  */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-const SECRET_ENV = "AFFILIATE_S2S_SECRET";
+// The shared S2S secret has different env-var names on each side
+// (RESERVE_S2S_SECRET on affiliate, AFFILIATE_S2S_SECRET on reserve)
+// but the value is identical. Accept either so this module works in
+// both repos with their existing deploy convention — see
+// affiliate/README.md and reserve env.ts.
+const SECRET_ENVS = ["AFFILIATE_S2S_SECRET", "RESERVE_S2S_SECRET"] as const;
 const TOKEN_VERSION = 1;
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
@@ -44,11 +49,13 @@ function b64urlDecode(s: string): Buffer {
 }
 
 function getSecret(): string {
-  const s = process.env[SECRET_ENV];
-  if (!s || s.length < 32) {
-    throw new Error(`${SECRET_ENV} not configured (need >= 32 chars)`);
+  for (const name of SECRET_ENVS) {
+    const v = process.env[name];
+    if (v && v.length >= 32) return v;
   }
-  return s;
+  throw new Error(
+    `Affiliate token secret not configured. Set one of: ${SECRET_ENVS.join(", ")} (>= 32 chars)`,
+  );
 }
 
 export function signAffiliateToken(
