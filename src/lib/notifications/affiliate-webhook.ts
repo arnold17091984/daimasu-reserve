@@ -132,3 +132,110 @@ export async function notifyAffiliate(event: AffiliateEvent): Promise<void> {
     );
   }
 }
+
+/**
+ * Attribution payload — fired the moment a public-flow reservation is
+ * created carrying an affiliate slug (cookie or query). Tells affiliate
+ * to create the Booking mirror so the later settle webhook updates an
+ * existing row instead of orphaning.
+ *
+ * Derived URL: AFFILIATE_WEBHOOK_URL minus its trailing path component
+ * (".../reserve-settled") joined with "reserve-attribution". This keeps
+ * the integration to a single env var.
+ */
+export type AffiliateAttributionEvent = {
+  event: "reservation.attributed";
+  reservation_id: string;
+  affiliate_link_slug: string;
+  guest_name: string;
+  guest_phone: string | null;
+  party_size: number;
+  reserved_for: string;
+  occurred_at: string;
+};
+
+function deriveAttributionUrl(settledUrl: string): string {
+  // settledUrl ends with "/reserve-settled"; swap for "/reserve-attribution".
+  return settledUrl.replace(/\/reserve-settled\/?$/, "/reserve-attribution");
+}
+
+export async function notifyAffiliateAttribution(args: {
+  readonly reservationId: string;
+  readonly slug: string;
+  readonly guestName: string;
+  readonly guestPhone: string | null;
+  readonly partySize: number;
+  readonly reservedFor: string;
+}): Promise<void> {
+  const env = serverEnv();
+  const url = env.AFFILIATE_WEBHOOK_URL;
+  const secret = env.AFFILIATE_S2S_SECRET;
+  if (!url || !secret) return;
+
+  const event: AffiliateAttributionEvent = {
+    event: "reservation.attributed",
+    reservation_id: args.reservationId,
+    affiliate_link_slug: args.slug,
+    guest_name: args.guestName,
+    guest_phone: args.guestPhone,
+    party_size: args.partySize,
+    reserved_for: args.reservedFor,
+    occurred_at: new Date().toISOString(),
+  };
+  const body = JSON.stringify(event);
+  const signature = createHmac("sha256", secret).update(body).digest("hex");
+  const target = deriveAttributionUrl(url);
+
+  let lastError = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(target, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Affiliate-Signature": signature,
+          },
+          body,
+          signal: controller.signal,
+        });
+        if (res.ok) return;
+        lastError = `non-2xx ${res.status}`;
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+    console.warn(
+      "[affiliate-attribution] attempt failed",
+      args.reservationId,
+      `${attempt}/${MAX_ATTEMPTS}`,
+      lastError,
+    );
+    if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
+  }
+
+  // Settle webhook will still fire later and the receiver self-heals if
+  // no Booking mirror exists. We still log the failure for visibility.
+  try {
+    await auditInsert(adminClient(), {
+      actor: "system",
+      reservation_id: args.reservationId,
+      action: "affiliate.attribution.failed",
+      after_data: {
+        slug: args.slug,
+        last_error: lastError,
+      },
+      reason: `affiliate-attribution delivery failed after ${MAX_ATTEMPTS} attempts`,
+    });
+  } catch (err) {
+    console.error(
+      "[affiliate-attribution] failed to record delivery failure",
+      args.reservationId,
+      err,
+    );
+  }
+}

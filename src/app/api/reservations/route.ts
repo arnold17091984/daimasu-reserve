@@ -35,6 +35,7 @@ import {
 } from "@/lib/domain/reservation";
 import { serverEnv, isDepositRequired } from "@/lib/env";
 import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
+import { notifyAffiliateAttribution } from "@/lib/notifications/affiliate-webhook";
 import { auditInsert } from "@/lib/db/audit";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
@@ -278,26 +279,34 @@ export async function POST(req: NextRequest) {
     bookedRow.dietary = input.dietary;
   }
 
-  // Persist cast-affiliate attribution (migration 0021). Honoured ONLY
-  // for affiliate-origin (S2S bearer) calls — a public caller cannot
-  // forge an attribution by stuffing these fields into the JSON body.
-  // Same defensive follow-up UPDATE as dietary: a 42703 (column not yet
-  // migrated) is swallowed so the booking still succeeds.
-  if (isAffiliateOrigin && (input.affiliate_link_slug || input.affiliate_coupon_code)) {
+  // Persist cast-affiliate attribution.
+  // Two trusted sources:
+  //  - S2S bearer caller (legacy path): JSON body fields.
+  //  - Public caller carrying the `daimasu_aff_slug` cookie set by the
+  //    affiliate /r/[slug] redirect. Cookie is parent-domain
+  //    (.daimasu.com.ph) so it survives the redirect from
+  //    affiliate.daimasu.com.ph → reserve.daimasu.com.ph. We trust it
+  //    only as a lookup key; the affiliate webhook will reject any
+  //    unknown / suspended slug. A public caller can stuff cookies,
+  //    but the worst they can do is mis-attribute a single booking to
+  //    a real cast — no money escapes affiliate's own validation.
+  const cookieSlug = isAffiliateOrigin
+    ? null
+    : req.cookies.get("daimasu_aff_slug")?.value ?? null;
+  const attributedSlug =
+    (isAffiliateOrigin ? input.affiliate_link_slug : cookieSlug) ?? null;
+  const attributedCoupon = isAffiliateOrigin
+    ? input.affiliate_coupon_code ?? null
+    : null;
+  if (attributedSlug || attributedCoupon) {
     const { error: affErr } = await sb
       .from("reservations")
       .update({
-        affiliate_link_slug: input.affiliate_link_slug ?? null,
-        affiliate_coupon_code: input.affiliate_coupon_code ?? null,
+        affiliate_link_slug: attributedSlug,
+        affiliate_coupon_code: attributedCoupon,
       })
       .eq("id", reservationId);
     if (affErr) {
-      // Attribution failed to persist — commission-critical. Settle /
-      // no-show webhooks read the slug off this row, so a silent loss
-      // here means the referring cast never gets paid. The booking is
-      // already committed and must NOT roll back, so instead record the
-      // failure durably in audit_log for manual backfill / reconciliation.
-      // Covers both 42703 (migration skew) and any transient DB error.
       console.warn(
         "[reservations] affiliate attribution update failed",
         affErr.code,
@@ -309,8 +318,8 @@ export async function POST(req: NextRequest) {
           reservation_id: reservationId,
           action: "reservation.affiliate_attribution.failed",
           after_data: {
-            affiliate_link_slug: input.affiliate_link_slug ?? null,
-            affiliate_coupon_code: input.affiliate_coupon_code ?? null,
+            affiliate_link_slug: attributedSlug,
+            affiliate_coupon_code: attributedCoupon,
             error_code: affErr.code,
             error_message: affErr.message,
           },
@@ -318,8 +327,26 @@ export async function POST(req: NextRequest) {
         })
       );
     }
-    bookedRow.affiliate_link_slug = input.affiliate_link_slug ?? null;
-    bookedRow.affiliate_coupon_code = input.affiliate_coupon_code ?? null;
+    bookedRow.affiliate_link_slug = attributedSlug;
+    bookedRow.affiliate_coupon_code = attributedCoupon;
+
+    // Public-flow attribution: tell the affiliate side a booking
+    // happened with this slug so it can create the Booking mirror that
+    // the eventual settle webhook will update. The S2S-origin path is
+    // skipped because affiliate creates the mirror itself before
+    // forwarding the booking; firing this for S2S would double-insert.
+    if (!isAffiliateOrigin && attributedSlug) {
+      after(() =>
+        notifyAffiliateAttribution({
+          reservationId,
+          slug: attributedSlug,
+          guestName: input.guest_name,
+          guestPhone: input.guest_phone ?? null,
+          partySize: input.party_size,
+          reservedFor: startsAt.toISOString(),
+        })
+      );
+    }
   }
 
   // 5a. Deposit-free path: row is already committed by the atomic RPC
