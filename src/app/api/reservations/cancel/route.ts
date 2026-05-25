@@ -135,11 +135,14 @@ export async function POST(req: NextRequest) {
     .eq("kind", "deposit_capture")
     .limit(1)
     .maybeSingle<{ provider_ref: string | null }>();
-  const hasStripeDeposit = Boolean(
-    reservation.deposit_centavos > 0 && depositPayment?.provider_ref
-  );
-  const tier = hasStripeDeposit ? refundTier(hours, settings) : "full";
-  const refundCentavos = hasStripeDeposit
+  // Whether a deposit was ever collected (cash or Stripe). The policy
+  // tier + refund amount apply to *any* collected deposit; whether the
+  // refund can be executed inline (Stripe API call) or has to be done
+  // by hand (cash / bank transfer) is a separate concern below.
+  const hasDeposit = reservation.deposit_centavos > 0;
+  const hasStripeDeposit = Boolean(hasDeposit && depositPayment?.provider_ref);
+  const tier = hasDeposit ? refundTier(hours, settings) : "full";
+  const refundCentavos = hasDeposit
     ? refundAmountCentavos(tier, reservation.deposit_centavos)
     : 0;
 
@@ -201,11 +204,18 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Insert payment row (negative amount). UNIQUE on idempotency_key absorbs retries.
+  //    Provider mirrors the original deposit channel: a Stripe refund
+  //    gets provider="stripe" + the refund's provider_ref. A manual
+  //    deposit refund is pending (staff will execute it out-of-band)
+  //    so it goes in as provider="on_site" with no provider_ref —
+  //    this keeps revenue reports honest (negative liability owed)
+  //    and tells the operator at a glance which refunds still need
+  //    physical action.
   if (refundCentavos > 0) {
     await sb.from("payments").insert({
       reservation_id: reservation.id,
       kind: tier === "full" ? "refund_full" : "refund_partial",
-      provider: "stripe",
+      provider: hasStripeDeposit ? "stripe" : "on_site",
       amount_centavos: -refundCentavos,
       method: null,
       provider_ref: stripeRefundId,
