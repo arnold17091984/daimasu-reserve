@@ -242,10 +242,22 @@ export async function POST(req: NextRequest) {
     });
 
     if (flipped) {
+      // Refund channel = Stripe iff a refund actually goes through the
+      // Stripe path here (hasStripeDeposit was true + refundCentavos > 0).
+      // Manual when a non-Stripe deposit existed; none when no deposit.
+      let refundChannel: "stripe" | "manual" | "none";
+      if (refundCentavos > 0 && hasStripeDeposit) {
+        refundChannel = "stripe";
+      } else if (reservation.deposit_centavos > 0) {
+        refundChannel = "manual";
+      } else {
+        refundChannel = "none";
+      }
       const { subject, html } = renderCancelEmail({
         reservation: flipped,
         refundCentavos,
         tier,
+        refundChannel,
       });
       await sendEmail({
         to: flipped.guest_email,

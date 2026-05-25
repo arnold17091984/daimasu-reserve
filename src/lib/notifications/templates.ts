@@ -19,6 +19,20 @@ interface CancelledArgs {
   reservation: Reservation;
   refundCentavos: number;
   tier: "full" | "partial" | "late";
+  /**
+   * Refund channel.
+   *  - "stripe":   the deposit was paid via Stripe; the refund is being
+   *                pushed back through Stripe inline with this cancel.
+   *  - "manual":   the deposit (if any) was collected out-of-band
+   *                (bank transfer / GCash / cash) — staff will reverse
+   *                it the same way. We can't promise a Stripe refund.
+   *  - "none":     no deposit was ever collected, so there's nothing
+   *                to refund.
+   * deposit_centavos alone is NOT a reliable Stripe-mode discriminator
+   * because owner-manual bookings with deposit_received=true also
+   * carry deposit_centavos > 0 but provider="on_site" (Codex review).
+   */
+  refundChannel: "stripe" | "manual" | "none";
 }
 
 interface ReminderArgs {
@@ -345,23 +359,33 @@ export function renderCancelEmail(args: CancelledArgs): { subject: string; html:
       ? `【DAIMASU 大桝 BAR】キャンセルを承りました`
       : `DAIMASU Reservation Cancelled`;
 
-  // In Stripe-deposit mode the refund is processed through Stripe.
-  // In manual-deposit mode there's no Stripe charge to reverse, and
-  // any deposit collected out-of-band must be refunded the same way —
-  // so the wording shifts to "staff will be in touch."
-  const stripeMode = r.deposit_centavos > 0;
-  const refundLine =
-    args.refundCentavos > 0
-      ? stripeMode
-        ? lang === "ja"
-          ? `${formatPHP(args.refundCentavos, lang)} を Stripe より返金処理いたしました (5–10 営業日でお戻りいたします)。`
-          : `A refund of ${formatPHP(args.refundCentavos, lang)} has been issued via Stripe (typically 5–10 business days).`
-        : lang === "ja"
-          ? `デポジットをお支払いいただいている場合は、スタッフより返金 (${formatPHP(args.refundCentavos, lang)}) のお手続きをご連絡させていただきます。`
-          : `If a deposit was already collected, our staff will be in touch about the refund (${formatPHP(args.refundCentavos, lang)}).`
-      : lang === "ja"
+  // Refund-channel-driven wording. Caller decides which channel applies
+  // (see CancelledArgs.refundChannel) — we no longer infer Stripe-vs-
+  // manual from deposit_centavos, which the previous version got wrong
+  // for owner-manual cash bookings.
+  const refundLine = (() => {
+    if (args.refundCentavos === 0) {
+      return lang === "ja"
         ? `恐れ入りますが、当日キャンセルにつき返金はございません。`
         : `As this is a same-day cancellation, no refund is issued per our policy.`;
+    }
+    switch (args.refundChannel) {
+      case "stripe":
+        return lang === "ja"
+          ? `${formatPHP(args.refundCentavos, lang)} を Stripe より返金処理いたしました (5–10 営業日でお戻りいたします)。`
+          : `A refund of ${formatPHP(args.refundCentavos, lang)} has been issued via Stripe (typically 5–10 business days).`;
+      case "manual":
+        return lang === "ja"
+          ? `デポジットをお支払いいただいている場合は、スタッフより返金 (${formatPHP(args.refundCentavos, lang)}) のお手続きを別途ご連絡させていただきます。`
+          : `If a deposit was already collected, our staff will be in touch separately about the refund (${formatPHP(args.refundCentavos, lang)}).`;
+      case "none":
+        // refund=0 already handled above; "none" with refund>0 is a
+        // logic error in the caller, but fall back gracefully.
+        return lang === "ja"
+          ? `返金処理についてはスタッフよりご連絡させていただきます。`
+          : `Our staff will be in touch about the refund.`;
+    }
+  })();
 
   const body = `<h1 style="margin:0 0 8px;font-size:22px;font-weight:500;letter-spacing:0.04em;">${lang === "ja" ? "キャンセルを承りました" : "Reservation cancelled"}</h1>
     <p style="margin:0 0 16px;font-size:13px;color:${PALETTE.textMuted};">${escapeHtml(r.guest_name)} 様</p>
