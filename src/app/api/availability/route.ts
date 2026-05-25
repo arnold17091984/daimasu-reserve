@@ -14,6 +14,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { availabilityQuerySchema } from "@/lib/domain/schemas";
+import { isClosedWeekday } from "@/lib/domain/reservation";
 import type { RestaurantSettings } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -98,7 +99,10 @@ export async function GET(req: NextRequest) {
       date,
       s1_remaining: Math.max(0, onlineSeats - s1Taken),
       s2_remaining: Math.max(0, onlineSeats - s2Taken),
-      closed: closedSet.has(date),
+      // Monday is the bar's weekly closure — surface it the same way
+      // owner-marked closures are so the calendar disables it without
+      // requiring 52× per-year hand-entries in `closed_dates`.
+      closed: closedSet.has(date) || isClosedWeekday(date),
     });
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }

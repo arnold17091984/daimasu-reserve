@@ -14,6 +14,7 @@
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti } from "@/lib/auth/admin-lang";
 import { adminClient } from "@/lib/db/clients";
+import { isClosedWeekday } from "@/lib/domain/reservation";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 import { ManualBookingForm } from "./booking-form";
 
@@ -123,7 +124,10 @@ export default async function NewReservationPage({
       s2_taken: occ.s2.taken,
       s2_seats: occ.s2.seats,
       s2_bookings: occ.s2.bookings,
-      closed: closedDates.has(date),
+      // Same standing-Monday-closure logic the public form uses — keep
+      // the admin grid in sync so the owner can't double-book a Monday
+      // by accident either.
+      closed: closedDates.has(date) || isClosedWeekday(date),
     });
   }
 

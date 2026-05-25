@@ -16,6 +16,7 @@ import {
   receiptBreakdown,
   blocksCapacity,
   serviceStartsAt,
+  isClosedWeekday,
   SERVICE_CHARGE_PCT,
   VAT_PCT,
 } from "@/lib/domain/reservation";
@@ -201,5 +202,28 @@ describe("receiptBreakdown — PH VAT + service charge math", () => {
     expect(r.vat_centavos).toBe(3_080);
     expect(r.grand_total_centavos).toBe(28_744);
     expect(r.balance_centavos).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("isClosedWeekday — weekly Monday closure", () => {
+  // Anchor dates picked from a known calendar — 2026-05-25 is a Monday,
+  // the day this guard was added.
+  it("returns true for Mondays", () => {
+    expect(isClosedWeekday("2026-05-25")).toBe(true);
+    expect(isClosedWeekday("2026-06-01")).toBe(true);
+    expect(isClosedWeekday("2026-12-28")).toBe(true);
+  });
+  it("returns false for every other weekday", () => {
+    expect(isClosedWeekday("2026-05-24")).toBe(false); // Sun
+    expect(isClosedWeekday("2026-05-26")).toBe(false); // Tue
+    expect(isClosedWeekday("2026-05-27")).toBe(false); // Wed
+    expect(isClosedWeekday("2026-05-28")).toBe(false); // Thu
+    expect(isClosedWeekday("2026-05-29")).toBe(false); // Fri
+    expect(isClosedWeekday("2026-05-30")).toBe(false); // Sat
+  });
+  it("calendar date is interpretation-invariant — same answer regardless of host TZ", () => {
+    // 2027-01-04 is a Monday. The result must be true whether the host
+    // is in Manila, UTC, or Tokyo.
+    expect(isClosedWeekday("2027-01-04")).toBe(true);
   });
 });

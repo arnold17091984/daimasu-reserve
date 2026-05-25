@@ -71,6 +71,22 @@ export function refundAmountCentavos(
   }
 }
 
+/**
+ * Recurring weekly closure check. The bar is dark on Mondays year-round,
+ * so the calendar should refuse a Monday selection without needing the
+ * owner to mark each Monday in `closed_dates` by hand.
+ *
+ * A YYYY-MM-DD calendar date represents the same weekday regardless of
+ * which TZ you interpret it in (a date isn't an instant), so building
+ * `Date.UTC(y, m-1, d)` and reading `getUTCDay()` returns the right
+ * weekday for the calendar date itself.
+ */
+export function isClosedWeekday(dateIso: string): boolean {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  // 0 = Sunday, 1 = Monday … 6 = Saturday.
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 1;
+}
+
 /** Reservation status after cancellation by tier. */
 export function statusAfterCancel(tier: RefundTier): ReservationStatus {
   switch (tier) {

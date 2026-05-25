@@ -31,6 +31,7 @@ import { createReservationSchema } from "@/lib/domain/schemas";
 import {
   serviceStartsAt,
   priceBreakdown,
+  isClosedWeekday,
 } from "@/lib/domain/reservation";
 import { serverEnv, isDepositRequired } from "@/lib/env";
 import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
@@ -95,6 +96,14 @@ export async function POST(req: NextRequest) {
   if (input.website && input.website.length > 0) {
     // Honeypot tripped. Pretend success for bot-tarpit.
     return NextResponse.json({ ok: true, fake: true }, { status: 200 });
+  }
+
+  // Monday is the bar's standing weekly closure. The DayPicker already
+  // disables Mondays, but a hand-crafted request could still slip a
+  // Monday `service_date` past zod (which only checks date-shape +
+  // future-or-today). Reject here before the atomic INSERT.
+  if (isClosedWeekday(input.service_date)) {
+    return errJson({ code: "closed_date" }, 409);
   }
 
   const sb = adminClient();

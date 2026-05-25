@@ -364,8 +364,8 @@ export default function ReservationForm() {
                 "Pick a date, a seating, and party size. A 50% deposit secures your seat; a confirmation email arrives instantly."
               )
             : t(
-                "ご希望の日・時間・人数をお選びください。送信後すぐにご予約確定の確認メールが届きます。お支払いはご来店時にカウンターでお願いします (現金 / カード / GCash)。",
-                "Pick a date, a seating, and party size. Your seat is held and a confirmation email arrives instantly — no payment is taken now. Payment (cash / card / GCash) is collected at the counter on arrival."
+                "ご希望の日・時間・人数をお選びください。送信後すぐにご予約受付の確認メールが届きます。お席の確保にはコース料金の 50% のデポジットを頂戴しております。予約確認の際にスタッフよりお支払い手続きをご連絡させていただきます。",
+                "Pick a date, a seating, and party size. A confirmation email arrives instantly to acknowledge the request. A 50% deposit of the course price is required to hold your seat — our staff will be in touch about the payment procedure when we confirm your reservation."
               )}
         </p>
         {/* Plain-language summary for guests who haven't experienced
@@ -420,12 +420,25 @@ export default function ReservationForm() {
               mode="single"
               selected={selectedDate}
               onSelect={setSelectedDate}
-              disabled={{ before: minDate, after: maxDate }}
+              // Monday is the bar's standing weekly closure — disable it
+              // alongside the out-of-window dates so guests can't pick a
+              // date the server is just going to reject. dayOfWeek uses
+              // JS getDay() semantics: 1 = Monday.
+              disabled={[
+                { before: minDate, after: maxDate },
+                { dayOfWeek: [1] },
+              ]}
               weekStartsOn={1}
               numberOfMonths={1}
               showOutsideDays
               required
             />
+            <p className="text-[11px] tracking-[0.04em] text-text-muted">
+              {t(
+                "※ 月曜日は定休日のためご予約いただけません。",
+                "Mondays are closed."
+              )}
+            </p>
           </div>
           {selectedDate ? (
             <div className="flex items-center justify-between border border-gold/40 bg-gold/5 px-4 py-3">
@@ -831,8 +844,8 @@ export default function ReservationForm() {
                     "Next: pay a 50% deposit via Stripe. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
                   )
                 : t(
-                    "送信後すぐに確認メールが届き、ご予約が成立いたします。お支払いは当日現地で承ります（現金 / カード / GCash）。ご都合が変わった場合、確認メール内のリンクから 24 時間 365 日キャンセルいただけます。",
-                    "After submission a confirmation email arrives instantly and your seat is held. Payment is settled on-site (cash / card / GCash). You may cancel any time via the link in your confirmation email."
+                    "送信後、ご予約受付の確認メールが届きます。お席の確保にはコース料金の 50% のデポジットが必要です。スタッフより予約確認のご連絡を差し上げる際に、お支払いのお手続き（銀行振込 / GCash / カウンター現金など）をご案内させていただきます。残金は当日現地でお支払いください。48時間前まで100%、24時間前まで50%返金いたします。",
+                    "After submission a confirmation email arrives to acknowledge the request. A 50% deposit of the course price is required to hold your seat — our staff will contact you about the payment procedure (bank transfer / GCash / cash at the counter) when we confirm your reservation. The balance is settled on-site. 100% refund up to 48h before; 50% up to 24h."
                   )}
             </p>
             <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
@@ -975,8 +988,8 @@ export default function ReservationForm() {
               `Course ${COURSE_PRICE.amount} per guest (tax & service not included). 50% deposit via Stripe; balance on-site (cash / card / GCash). 100% refund up to 48h, 50% up to 24h.`
             )
           : t(
-              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)。お支払いは当日現地で承ります(現金 / カード / GCash)。キャンセルはいつでも承ります。`,
-              `Course ${COURSE_PRICE.amount} per guest (tax & service not included). Payment is settled on-site (cash / card / GCash). Cancel any time.`
+              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)・デポジット50%(予約確認時にスタッフよりご案内)・残金は当日現地払い(現金 / カード / GCash)。月曜定休。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
+              `Course ${COURSE_PRICE.amount} per guest (tax & service not included). 50% deposit (procedure communicated by our staff at reservation confirmation); balance settled on-site (cash / card / GCash). Closed Mondays. 100% refund up to 48h, 50% up to 24h.`
             )}
       </p>
     </div>
