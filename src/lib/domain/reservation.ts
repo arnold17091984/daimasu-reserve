@@ -145,42 +145,59 @@ export function priceBreakdown(
 }
 
 /**
- * Philippine restaurant receipt convention:
+ * Philippine restaurant receipt convention (BIR review 2026-05-26):
  *
- *   menu_subtotal              ← course_price × party_size  (VAT-exclusive)
- *   service_charge = 10%       ← computed on menu_subtotal
- *   vat_base = menu_subtotal + service_charge
- *   vat = 12% of vat_base
- *   grand_total = vat_base + vat
+ *   course_price × party_size  =  gross_menu_incl   (VAT-INCLUSIVE)
+ *   menu_subtotal              =  round(gross / 1.12)   ← Gross Sale (VAT-Ex Base)
+ *   vat                        =  gross - menu_subtotal ← 12% VAT (back-derived)
+ *   service_charge             =  round(menu_subtotal × 0.10)  ← 10% SC on net
+ *   grand_total                =  menu_subtotal + service_charge + vat
+ *                              =  gross_menu_incl + service_charge
  *
- * Rationale:
- *  - SVC 10% is industry standard in Manila and is shared with staff.
- *    BIR Revenue Regulations No. 16-2005 § 4.114-1: SVC is part of the
- *    gross receipts subject to VAT, hence we apply 12% on (subtotal+SVC).
- *  - VAT 12% is the standard rate under NIRC § 106. Restaurants are not
- *    among the VAT-exempt categories.
- *  - All figures are in centavos and are rounded to integer at each step
- *    so the receipt totals are exact (no fractional centavos drift).
+ * Why VAT-INCLUSIVE menu pricing:
+ *  - The menu price shown to guests on the website (₱8,000 / cover) is
+ *    VAT-inclusive. The BIR-compliant OR back-derives the VAT-Ex base
+ *    from it instead of layering VAT on top (which would push the
+ *    advertised price up to ₱9,856 — confusing to guests and out of step
+ *    with how Filipino fine-dining quotes net prices).
+ *  - Service charge 10% is added on top of the VAT-Ex base, matching the
+ *    BIR-approved breakdown:
+ *       Gross Sale (VAT-Ex)    7,142.86
+ *       12% VAT                  857.14   (already inside the menu price)
+ *       10% Service Charge       714.29
+ *       Total Amount Due       8,714.29
  *
- * The deposit (Stripe checkout) is computed off `grand_total` so the
- * 50% prepayment matches what the diner ultimately owes. The balance
- * paid on-site is `grand_total - deposit_centavos`.
+ *  Note: BIR RR 16-2005 § 4.114-1 typically makes SC part of gross receipts
+ *  subject to VAT, but the receipt format the Bureau approved for this
+ *  establishment quotes SC on the VAT-Ex base specifically so the guest-
+ *  facing price stays clean at ₱8,000.
+ *
+ *  - VAT 12% is the standard rate under NIRC § 106.
+ *  - All figures are in centavos with integer rounding at each step so
+ *    the receipts_money_eq DB constraint (menu + sc + vat = grand) is
+ *    exactly satisfied per row.
+ *
+ * The deposit (Stripe checkout) is computed off `grand_total` here so the
+ * receipt's "deposit / balance" lines reconcile, but the reservation row
+ * stores a separate deposit/balance derived from menu-only (see
+ * `priceBreakdown` — DB constraint balance_eq_total). The actual on-site
+ * balance owed is always `grand_total - reservation.deposit_centavos`.
  */
 export const SERVICE_CHARGE_PCT = 10;
 export const VAT_PCT = 12;
 
 export interface ReceiptBreakdown {
-  /** Pre-tax, pre-SVC menu total (= course_price × party_size). */
+  /** BIR "Gross Sale (VAT-Ex Base)" — net of VAT, back-derived from menu price. */
   menu_subtotal_centavos: number;
-  /** 10% of menu_subtotal, rounded to integer centavos. */
+  /** 10% of menu_subtotal (VAT-Ex base), rounded to integer centavos. */
   service_charge_centavos: number;
-  /** 12% applied to (menu_subtotal + service_charge). */
+  /** 12% VAT, back-derived: gross_menu_incl - menu_subtotal. */
   vat_centavos: number;
-  /** Grand total inclusive of SVC + VAT. */
+  /** Final amount due to the guest = menu + sc + vat (DB constraint). */
   grand_total_centavos: number;
-  /** Stripe deposit charged at booking time. */
+  /** Stripe deposit at the receipt-grand-total level. */
   deposit_centavos: number;
-  /** Remainder paid on-site. */
+  /** Remainder paid on-site (= grand - deposit). */
   balance_centavos: number;
 }
 
@@ -189,11 +206,16 @@ export function receiptBreakdown(
   partySize: number,
   depositPct: number
 ): ReceiptBreakdown {
-  const menu_subtotal = coursePriceCentavos * partySize;
+  // The menu price (course_price_centavos) is VAT-INCLUSIVE; back-derive
+  // the VAT-Ex base so the OR shows BIR-compliant Gross Sale + VAT lines.
+  const gross_menu_incl = coursePriceCentavos * partySize;
+  const menu_subtotal = Math.round((gross_menu_incl * 100) / (100 + VAT_PCT));
+  // Force vat to absorb the rounding residual so net + vat == gross exactly
+  // (otherwise BIR reconciliation drifts by 1 centavo for some party sizes).
+  const vat = gross_menu_incl - menu_subtotal;
   const service_charge = Math.round((menu_subtotal * SERVICE_CHARGE_PCT) / 100);
-  const vat_base = menu_subtotal + service_charge;
-  const vat = Math.round((vat_base * VAT_PCT) / 100);
-  const grand_total = vat_base + vat;
+  // Sum form satisfies the DB check `menu + sc + vat = grand_total`.
+  const grand_total = menu_subtotal + service_charge + vat;
   const deposit = Math.floor((grand_total * depositPct) / 100);
   const balance = grand_total - deposit;
   return {

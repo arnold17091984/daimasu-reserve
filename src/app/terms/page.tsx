@@ -40,7 +40,7 @@ export default function TermsPage() {
             DAIMASU offers an 8-course projection-mapping kaiseki menu of approximately 90 minutes. The menu price is {COURSE_PRICE.amount} PHP per guest. Prices may change seasonally; the price valid for your booking is the price in effect on the day you book and will be shown on the confirmation email.
           </p>
           <p className="mt-2">
-            Service charge (10%) and VAT (12%) apply per Philippine law and are itemised on your receipt.
+            The menu price is <strong>VAT-inclusive</strong> (12% VAT, per NIRC § 106, is already baked into the {COURSE_PRICE.amount} figure). A <strong>10% service charge</strong> is added to your bill at the restaurant. Your BIR-compliant Official Receipt itemises the Gross Sale (VAT-Ex base), 12% VAT, and 10% service charge separately — for a single cover at {COURSE_PRICE.amount}, the total amount due is ₱8,714.29.
           </p>
         </section>
 

@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, CheckCircle2, X, Armchair } from "lucide-react";
 import type { RestaurantSettings, SeatingSlot } from "@/lib/db/types";
-import { autoAllocateSeats, formatPHP } from "@/lib/domain/reservation";
+import { autoAllocateSeats, formatPHP, receiptBreakdown } from "@/lib/domain/reservation";
 import type { AdminLang } from "@/lib/auth/admin-lang";
 import { CelebrationPanel, EMPTY_CELEBRATION } from "../../_components/celebration-panel";
 import { CelebrationReview } from "../../_components/celebration-display";
@@ -1230,9 +1230,16 @@ function ReviewPanel({
   onEdit: () => void;
 }) {
   const ti = (ja: string, en: string) => (lang === "ja" ? ja : en);
+  // Stored values: deposit + balance == VAT-inclusive menu total
+  // (DB constraint balance_eq_total on reservations).
   const courseTotal = coursePriceCentavos * partySize;
   const deposit = Math.floor((courseTotal * depositPct) / 100);
-  const balance = courseTotal - deposit;
+  // BIR-style receipt-grand balance: actual amount the guest will pay on
+  // site = grand_total (menu VAT-incl + 10% SC) minus the deposit already
+  // captured. Surfacing this here so staff don't quote stale menu-only
+  // figures at the counter.
+  const receipt = receiptBreakdown(coursePriceCentavos, partySize, depositPct);
+  const balance = receipt.grand_total_centavos - deposit;
   const dateObj = new Date(`${date}T00:00:00+08:00`);
   const dateLabel = dateObj.toLocaleDateString(
     lang === "ja" ? "ja-JP" : "en-PH",
@@ -1327,12 +1334,20 @@ function ReviewPanel({
           {ti("料金内訳", "Pricing breakdown")}
         </p>
         <Row
-          label={ti("コース料金", "Course price")}
+          label={ti("コース料金 (VAT 込)", "Course price (VAT incl.)")}
           value={`${formatPHP(coursePriceCentavos, lang)} × ${partySize}`}
         />
         <Row
-          label={ti("合計", "Total")}
+          label={ti("メニュー小計", "Menu subtotal")}
           value={formatPHP(courseTotal, lang)}
+        />
+        <Row
+          label={ti("サービス料 (10%)", "Service charge (10%)")}
+          value={formatPHP(receipt.service_charge_centavos, lang)}
+        />
+        <Row
+          label={ti("お支払い総額 (税サ込)", "Grand total (incl. tax/svc)")}
+          value={formatPHP(receipt.grand_total_centavos, lang)}
           accent
         />
         <Row

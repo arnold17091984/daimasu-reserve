@@ -163,12 +163,24 @@ export default function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-shadow-hero-gold mb-8 font-[family-name:var(--font-cinzel),var(--font-noto-serif),serif] font-medium tracking-[0.06em] text-gold [font-size:clamp(17px,4vw,23px)]"
+          className="text-shadow-hero-gold mb-2 font-[family-name:var(--font-cinzel),var(--font-noto-serif),serif] font-medium tracking-[0.06em] text-gold [font-size:clamp(17px,4vw,23px)]"
         >
           {COURSE_PRICE.amount}
           <span className="ml-1 text-[0.78em] tracking-[0.12em]">PHP</span>
           <span className="mx-3 text-gold/60">|</span>
           {t("全8コース・約90分", "8 courses · 90 minutes")}
+        </motion.p>
+        {/* VAT-inclusive / 10% SC notice — BIR 2026-05-26 disclosure */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="mb-8 font-[family-name:var(--font-noto-serif)] tracking-[0.04em] text-foreground/70 [font-size:clamp(10px,2.4vw,12px)]"
+        >
+          {t(
+            "VAT 込・サービス料 10% 別途",
+            "VAT included · 10% service charge added separately"
+          )}
         </motion.p>
 
         {/* CTA stack — max-w 560px, 64px tall (58px mobile), sharp corners, chevron right */}

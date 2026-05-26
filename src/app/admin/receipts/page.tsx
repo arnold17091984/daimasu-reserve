@@ -110,7 +110,7 @@ export default async function ReceiptsPage({
           }
         />
         <Stat
-          label={ti(lang, "メニュー小計", "Menu subtotal")}
+          label={ti(lang, "売上 (VAT 除く)", "Gross Sale (VAT-Ex)")}
           value={formatPHP(total.menu, lang)}
         />
         <Stat
@@ -180,7 +180,7 @@ export default async function ReceiptsPage({
                     {ti(lang, "お客様", "Guest")}
                   </th>
                   <th className="px-3 py-3 text-right">
-                    {ti(lang, "メニュー", "Menu")}
+                    {ti(lang, "VAT-Ex", "VAT-Ex")}
                   </th>
                   <th className="px-3 py-3 text-right">
                     {ti(lang, "サービス料", "Svc")}

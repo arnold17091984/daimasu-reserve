@@ -148,60 +148,77 @@ describe("hoursUntilService — sign + magnitude", () => {
   });
 });
 
-describe("receiptBreakdown — PH VAT + service charge math", () => {
+describe("receiptBreakdown — PH VAT-inclusive menu + SC layered on top", () => {
+  // 2026-05-26 BIR review: the menu price (course_price_centavos) is now
+  // treated as VAT-INCLUSIVE. The OR breakdown back-derives Gross Sale
+  // (VAT-Ex base) from it and adds the 10% service charge on top of the
+  // net base. This matches the receipt format the Bureau approved
+  // (Gross 7,142.86 + 12% VAT 857.14 + 10% SC 714.29 = Total 8,714.29
+  // for a single ₱8,000 cover).
   it("constants match BIR / industry standard", () => {
     expect(VAT_PCT).toBe(12);
     expect(SERVICE_CHARGE_PCT).toBe(10);
   });
 
-  it("computes the spec example exactly (₱8,000 × 4 = ₱32,000 menu)", () => {
-    // 4 guests at ₱8,000 each
-    const r = receiptBreakdown(800_000, 4, 50);
-    // menu subtotal: ₱32,000.00
-    expect(r.menu_subtotal_centavos).toBe(3_200_000);
-    // SVC: 10% of ₱32,000 = ₱3,200.00
-    expect(r.service_charge_centavos).toBe(320_000);
-    // VAT base: ₱32,000 + ₱3,200 = ₱35,200; VAT 12% = ₱4,224.00
-    expect(r.vat_centavos).toBe(422_400);
-    // grand total: ₱35,200 + ₱4,224 = ₱39,424.00
-    expect(r.grand_total_centavos).toBe(3_942_400);
-    // 50% deposit on grand total = ₱19,712.00
-    expect(r.deposit_centavos).toBe(1_971_200);
-    // balance = grand_total - deposit = ₱19,712.00
-    expect(r.balance_centavos).toBe(1_971_200);
-  });
-
-  it("sums to grand total without centavo drift (single guest)", () => {
+  it("single ₱8,000 cover → P8,714.29 grand total (BIR receipt example)", () => {
     const r = receiptBreakdown(800_000, 1, 50);
-    expect(
-      r.menu_subtotal_centavos +
-        r.service_charge_centavos +
-        r.vat_centavos
-    ).toBe(r.grand_total_centavos);
-    expect(r.deposit_centavos + r.balance_centavos).toBe(r.grand_total_centavos);
+    // Gross Sale (VAT-Ex Base) = 800,000 / 1.12 ≈ 714,286 centavos = ₱7,142.86
+    expect(r.menu_subtotal_centavos).toBe(714_286);
+    // 12% VAT (back-derived) = 800,000 - 714,286 = 85,714 = ₱857.14
+    expect(r.vat_centavos).toBe(85_714);
+    // 10% Service Charge on net = round(714,286 * 0.10) = 71,429 = ₱714.29
+    expect(r.service_charge_centavos).toBe(71_429);
+    // Grand = net + SC + VAT = 714,286 + 71,429 + 85,714 = 871,429 = ₱8,714.29
+    expect(r.grand_total_centavos).toBe(871_429);
+    // 50% deposit of grand total = floor(871,429 / 2) = 435,714 = ₱4,357.14
+    expect(r.deposit_centavos).toBe(435_714);
+    expect(r.balance_centavos).toBe(871_429 - 435_714);
   });
 
-  it("rounds VAT and SVC consistently across odd party sizes (no fractional drift)", () => {
+  it("party of 4 × ₱8,000 = ₱32,000 VAT-incl → P34,857.14 grand", () => {
+    const r = receiptBreakdown(800_000, 4, 50);
+    // gross_menu_incl = 3,200,000; vat_ex = round(3,200,000 / 1.12) = 2,857,143
+    expect(r.menu_subtotal_centavos).toBe(2_857_143);
+    expect(r.vat_centavos).toBe(3_200_000 - 2_857_143);
+    expect(r.service_charge_centavos).toBe(Math.round((2_857_143 * 10) / 100));
+    expect(r.grand_total_centavos).toBe(
+      r.menu_subtotal_centavos + r.service_charge_centavos + r.vat_centavos
+    );
+  });
+
+  it("BIR DB invariant: menu_subtotal + sc + vat = grand_total (any party)", () => {
     for (let n = 1; n <= 8; n++) {
       const r = receiptBreakdown(800_000, n, 50);
+      // receipts table check constraint receipts_money_eq enforces this.
       expect(
-        r.menu_subtotal_centavos +
-          r.service_charge_centavos +
-          r.vat_centavos
+        r.menu_subtotal_centavos + r.service_charge_centavos + r.vat_centavos
       ).toBe(r.grand_total_centavos);
-      expect(r.deposit_centavos + r.balance_centavos).toBe(r.grand_total_centavos);
+      expect(r.deposit_centavos + r.balance_centavos).toBe(
+        r.grand_total_centavos
+      );
     }
   });
 
-  it("handles a non-divisible price without negative balance", () => {
-    // 7777 centavos × 3 = 23331 → SVC 2333.1 → 2333 (rounded) → VAT base 25664
-    // VAT 12% = 3079.68 → 3080 (rounded) → grand 28744
-    const r = receiptBreakdown(7_777, 3, 50);
-    expect(r.menu_subtotal_centavos).toBe(23_331);
-    expect(r.service_charge_centavos).toBe(2_333);
-    expect(r.vat_centavos).toBe(3_080);
-    expect(r.grand_total_centavos).toBe(28_744);
-    expect(r.balance_centavos).toBeGreaterThanOrEqual(0);
+  it("VAT-incl back-derivation: net + vat = gross_menu_incl (no centavo loss)", () => {
+    // The recorded VAT plus the recorded VAT-Ex base must add back up to the
+    // original VAT-inclusive menu total (course_price × party). Drift here
+    // would cause BIR reconciliation to fail.
+    for (let n = 1; n <= 8; n++) {
+      const r = receiptBreakdown(800_000, n, 50);
+      expect(r.menu_subtotal_centavos + r.vat_centavos).toBe(800_000 * n);
+    }
+  });
+
+  it("0% deposit: deposit=0, balance=grand_total", () => {
+    const r = receiptBreakdown(800_000, 2, 0);
+    expect(r.deposit_centavos).toBe(0);
+    expect(r.balance_centavos).toBe(r.grand_total_centavos);
+  });
+
+  it("100% deposit: balance=0", () => {
+    const r = receiptBreakdown(800_000, 2, 100);
+    expect(r.balance_centavos).toBe(0);
+    expect(r.deposit_centavos).toBe(r.grand_total_centavos);
   });
 });
 

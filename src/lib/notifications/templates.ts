@@ -6,7 +6,7 @@
  * on Outlook (table-based skeleton, inline styles only).
  */
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
-import { formatPHP } from "@/lib/domain/reservation";
+import { formatPHP, receiptBreakdown } from "@/lib/domain/reservation";
 import { CONTACT } from "@/lib/constants";
 
 interface ConfirmArgs {
@@ -237,31 +237,37 @@ function summaryTable(
           name: "お名前",
           date: "ご来店日時",
           party: "人数",
-          course: "コース",
+          course: "コース (VAT 込)",
           deposit: depositFree
             ? "50% デポジット (スタッフよりご連絡)"
             : "デポジット (お支払い済)",
-          balance: "残金 (当日お支払い)",
+          balance: "残金 (当日お支払い・サービス料 10% 込)",
           totalLine: "合計",
         }
       : {
           name: "Name",
           date: "Date / time",
           party: "Party",
-          course: "Course",
+          course: "Course (VAT incl.)",
           deposit: depositFree
             ? "50% deposit (staff will contact)"
             : "Deposit (paid)",
-          balance: "Balance on arrival",
+          balance: "Balance on arrival (incl. 10% service charge)",
           totalLine: "Total",
         };
 
+  // BIR-compliant: course_price is VAT-INCL; 10% SC is added at the
+  // restaurant. On-site balance the guest will actually owe = grand
+  // total minus deposit already paid (or implied half if deposit-free).
+  const receipt = receiptBreakdown(
+    r.course_price_centavos,
+    r.party_size,
+    r.deposit_pct
+  );
   const impliedDeposit = depositFree
     ? Math.floor(r.total_centavos / 2)
     : r.deposit_centavos;
-  const impliedBalance = depositFree
-    ? r.total_centavos - impliedDeposit
-    : r.balance_centavos;
+  const impliedBalance = receipt.grand_total_centavos - impliedDeposit;
 
   const row = (k: string, v: string) =>
     `<tr><td style="padding:6px 0;color:${PALETTE.textMuted};font-size:13px;letter-spacing:0.04em;">${k}</td><td style="padding:6px 0;color:${PALETTE.text};font-size:14px;text-align:right;">${v}</td></tr>`;

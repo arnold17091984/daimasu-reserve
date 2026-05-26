@@ -11,6 +11,7 @@ import {
   COUNTRY_CODES,
   COUNTRY_OTHER,
 } from "@/lib/constants";
+import { receiptBreakdown } from "@/lib/domain/reservation";
 import { publicEnv } from "@/lib/env";
 
 const DEPOSIT_REQUIRED = publicEnv.depositRequired;
@@ -590,18 +591,18 @@ export default function ReservationForm() {
                 )}
               </p>
             )}
-          {/* Live cost estimate — incl. PH 10% service charge + 12% VAT.
-              UX 2026-05-06 (Persona Filipino professional / Western
-              traveller) flagged the previous "tax & service not
-              included" footnote as ambiguous. Surfacing the all-in
-              total here removes booking hesitation. */}
+          {/* Live cost estimate — the menu price is VAT-INCLUSIVE; the
+              10% service charge is added at the restaurant. The all-in
+              grand total reconciles with the BIR-compliant Official
+              Receipt (Gross 7,142.86 + 12% VAT 857.14 + 10% SC 714.29
+              = 8,714.29 per cover). */}
           {(() => {
             const n = Number(party) || 0;
             if (n <= 0) return null;
-            const menu = COURSE_PRICE.amountCentavos * n;
-            const svc = Math.round(menu * 0.1);
-            const vat = Math.round((menu + svc) * 0.12);
-            const grand = menu + svc + vat;
+            // depositPct doesn't affect the customer-visible quote; use
+            // 0 so balance == grand_total and the field is unused here.
+            const r = receiptBreakdown(COURSE_PRICE.amountCentavos, n, 0);
+            const gross_menu = COURSE_PRICE.amountCentavos * n;
             const fmt = (c: number) =>
               new Intl.NumberFormat(lang === "ja" ? "ja-JP" : "en-PH", {
                 style: "currency",
@@ -611,10 +612,10 @@ export default function ReservationForm() {
             return (
               <p className="text-[12px] leading-relaxed text-text-secondary">
                 {t(
-                  `${n}名様 → コース ${fmt(menu)} + サービス料10% ${fmt(svc)} + VAT 12% ${fmt(vat)} = `,
-                  `${n} guest${n > 1 ? "s" : ""} → course ${fmt(menu)} + service 10% ${fmt(svc)} + VAT 12% ${fmt(vat)} = `
+                  `${n}名様 → コース ${fmt(gross_menu)} (VAT 込) + サービス料10% ${fmt(r.service_charge_centavos)} = `,
+                  `${n} guest${n > 1 ? "s" : ""} → course ${fmt(gross_menu)} (VAT incl.) + service 10% ${fmt(r.service_charge_centavos)} = `
                 )}
-                <span className="font-semibold text-gold">{fmt(grand)}</span>
+                <span className="font-semibold text-gold">{fmt(r.grand_total_centavos)}</span>
               </p>
             );
           })()}
@@ -991,12 +992,12 @@ export default function ReservationForm() {
       <p className="text-[11px] leading-relaxed tracking-wide text-text-muted">
         {DEPOSIT_REQUIRED
           ? t(
-              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)・デポジット50%は Stripe・残金は現地払い(現金 / カード / GCash)。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
-              `Course ${COURSE_PRICE.amount} per guest (tax & service not included). 50% deposit via Stripe; balance on-site (cash / card / GCash). 100% refund up to 48h, 50% up to 24h.`
+              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・VAT 込)・来店時に 10% サービス料・デポジット50%は Stripe・残金は現地払い(現金 / カード / GCash)。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
+              `Course ${COURSE_PRICE.amount} per guest (VAT included); 10% service charge added at the restaurant. 50% deposit via Stripe; balance on-site (cash / card / GCash). 100% refund up to 48h, 50% up to 24h.`
             )
           : t(
-              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・税サ別)・デポジット50%(予約確認時にスタッフよりご案内)・残金は当日現地払い(現金 / カード / GCash)。月曜定休。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
-              `Course ${COURSE_PRICE.amount} per guest (tax & service not included). 50% deposit (procedure communicated by our staff at reservation confirmation); balance settled on-site (cash / card / GCash). Closed Mondays. 100% refund up to 48h, 50% up to 24h.`
+              `※ コース料金 ${COURSE_PRICE.amount}(お一人様・VAT 込)・来店時に 10% サービス料・デポジット50%(予約確認時にスタッフよりご案内)・残金は当日現地払い(現金 / カード / GCash)。月曜定休。キャンセルは48時間前まで100%返金、24時間前まで50%返金。`,
+              `Course ${COURSE_PRICE.amount} per guest (VAT included); 10% service charge added at the restaurant. 50% deposit (procedure communicated by our staff at reservation confirmation); balance settled on-site (cash / card / GCash). Closed Mondays. 100% refund up to 48h, 50% up to 24h.`
             )}
       </p>
     </div>

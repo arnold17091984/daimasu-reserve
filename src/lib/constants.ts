@@ -277,7 +277,13 @@ export const COUNTRY_CODES = [
 export const COURSE_PRICE = {
   amount: "₱8,000",
   amountCentavos: 800_000,
-  note: { ja: "お一人様 / 税・サ別", en: "per guest / tax & service not included" },
+  // The ₱8,000 menu price is VAT-inclusive (12% VAT already baked in).
+  // A 10% service charge is added on top at the restaurant, so the final
+  // OR shows ₱7,142.86 net + ₱857.14 VAT + ₱714.29 SC = ₱8,714.29 due.
+  note: {
+    ja: "お一人様 (VAT 込) ／ 来店時に 10% サービス料",
+    en: "per guest · VAT included · 10% service charge at the restaurant",
+  },
 };
 
 export const COURSE_META = {

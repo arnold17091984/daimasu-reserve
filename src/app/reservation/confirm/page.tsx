@@ -13,7 +13,7 @@
 import Link from "next/link";
 import { CheckCircle2, Calendar, Users, Wallet } from "lucide-react";
 import { adminClient } from "@/lib/db/clients";
-import { formatPHP } from "@/lib/domain/reservation";
+import { formatPHP, receiptBreakdown } from "@/lib/domain/reservation";
 import { isDepositRequired } from "@/lib/env";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 
@@ -49,6 +49,18 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
 
   const depositFlow = isDepositRequired();
   const isPending = reservation.status === "pending_payment";
+
+  // BIR-compliant breakdown: course_price is VAT-INCL, 10% SC layered on
+  // top at the restaurant. The on-site balance the guest will actually
+  // owe is grand_total - deposit_already_paid, NOT the menu-only
+  // `balance_centavos` snapshot stored on the reservation row.
+  const receipt = receiptBreakdown(
+    reservation.course_price_centavos,
+    reservation.party_size,
+    reservation.deposit_pct
+  );
+  const onSiteBalance =
+    receipt.grand_total_centavos - reservation.deposit_centavos;
 
   return (
     <main className="min-h-screen bg-background">
@@ -101,8 +113,11 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
                 />
                 <Row
                   icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}
-                  label={t("当日お支払い", "Balance on arrival")}
-                  value={formatPHP(reservation.balance_centavos, lang)}
+                  label={t(
+                    "当日お支払い (サービス料 10% 込)",
+                    "Balance on arrival (incl. 10% service charge)"
+                  )}
+                  value={formatPHP(onSiteBalance, lang)}
                 />
               </>
             ) : (
@@ -110,15 +125,15 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
                 <Row
                   icon={<Wallet size={16} aria-hidden="true" />}
                   label={t("50% デポジット (お支払い手続きはスタッフよりご連絡)", "50% deposit (staff will contact)")}
-                  value={formatPHP(Math.floor(reservation.total_centavos / 2), lang)}
+                  value={formatPHP(reservation.deposit_centavos, lang)}
                 />
                 <Row
                   icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}
-                  label={t("当日お支払い", "Balance on arrival")}
-                  value={formatPHP(
-                    reservation.total_centavos - Math.floor(reservation.total_centavos / 2),
-                    lang
+                  label={t(
+                    "当日お支払い (サービス料 10% 込)",
+                    "Balance on arrival (incl. 10% service charge)"
                   )}
+                  value={formatPHP(onSiteBalance, lang)}
                 />
               </>
             )}
