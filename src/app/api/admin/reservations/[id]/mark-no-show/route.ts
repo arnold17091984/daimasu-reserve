@@ -43,6 +43,11 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     service_date: string;
     affiliate_link_slug?: string | null;
     affiliate_coupon_code?: string | null;
+    // Race-fix (2026-05-26): added to the row type so the no-show
+    // webhook payload can carry the metadata the affiliate side needs
+    // to upsert a Booking mirror when attribution hasn't arrived yet.
+    party_size: number;
+    service_starts_at: string;
   };
 
   await sb.from("audit_log").insert({
