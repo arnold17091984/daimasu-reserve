@@ -65,6 +65,10 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       guest_phone: row.guest_phone,
       service_date: row.service_date,
       occurred_at: new Date().toISOString(),
+      // Race-fix: see settle route. Lets the affiliate receiver upsert
+      // a cancelled Booking mirror even if attribution arrives later.
+      party_size: row.party_size,
+      reserved_for: row.service_starts_at,
     })
   );
 

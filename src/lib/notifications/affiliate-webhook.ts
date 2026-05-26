@@ -26,6 +26,10 @@ import { serverEnv } from "@/lib/env";
 import { adminClient } from "@/lib/db/clients";
 import { auditInsert } from "@/lib/db/audit";
 
+// party_size + reserved_for added 2026-05-26 so the terminal-event
+// receivers can upsert the Booking mirror even if they arrive before
+// the public-flow attribution webhook. Optional on the type so older
+// callers/data still type-check; new senders always populate them.
 export type AffiliateEvent =
   | {
       event: "reservation.settled";
@@ -37,6 +41,8 @@ export type AffiliateEvent =
       guest_phone: string | null;
       service_date: string;
       occurred_at: string;
+      party_size?: number;
+      reserved_for?: string;
     }
   | {
       event: "reservation.no_show";
@@ -47,6 +53,8 @@ export type AffiliateEvent =
       guest_phone: string | null;
       service_date: string;
       occurred_at: string;
+      party_size?: number;
+      reserved_for?: string;
     };
 
 const MAX_ATTEMPTS = 3;

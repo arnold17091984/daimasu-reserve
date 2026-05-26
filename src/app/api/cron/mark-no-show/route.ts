@@ -102,6 +102,9 @@ export async function POST(req: NextRequest) {
         guest_phone: r.guest_phone,
         service_date: r.service_date,
         occurred_at: nowIso,
+        // Race-fix: see settle route.
+        party_size: r.party_size,
+        reserved_for: r.service_starts_at,
       });
     }
   });

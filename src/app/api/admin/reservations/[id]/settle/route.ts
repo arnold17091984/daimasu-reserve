@@ -161,6 +161,12 @@ export async function POST(
       guest_phone: reservation.guest_phone,
       service_date: reservation.service_date,
       occurred_at: new Date().toISOString(),
+      // Race-fix (2026-05-26): include party_size + reserved_for so the
+      // affiliate receiver can upsert a Booking mirror if the public-
+      // flow attribution webhook hasn't yet arrived. Without these, the
+      // settle receiver creates a Visit but leaves the Booking missing.
+      party_size: reservation.party_size,
+      reserved_for: reservation.service_starts_at,
     })
   );
 
