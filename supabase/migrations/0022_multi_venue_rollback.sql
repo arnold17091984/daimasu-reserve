@@ -14,6 +14,15 @@ drop view if exists public.revenue_monthly_by_venue;
 drop view if exists public.revenue_daily_by_venue;
 
 -- 5. Restore book_reservation_atomic to pre-venue signature (from 0014).
+-- Drop the venue-aware 21-arg version first; CREATE OR REPLACE only matches
+-- exact signatures, so both would otherwise coexist.
+drop function if exists public.book_reservation_atomic(
+  uuid, date, seating_slot, timestamptz, smallint,
+  text, text, text, text, text,
+  bigint, smallint, bigint, bigint,
+  text, timestamptz, text, smallint[], jsonb, reservation_status, text
+);
+
 create or replace function public.book_reservation_atomic(
   p_id                       uuid,
   p_service_date             date,
@@ -71,6 +80,11 @@ end;
 $$;
 
 -- 4. Restore allocate_seats_or_throw to pre-venue version (from 0015).
+-- Same overload housekeeping as #5.
+drop function if exists public.allocate_seats_or_throw(
+  date, seating_slot, smallint, smallint[], text
+);
+
 create or replace function public.allocate_seats_or_throw(
   p_service_date date,
   p_seating      seating_slot,

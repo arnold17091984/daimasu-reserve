@@ -102,6 +102,14 @@ comment on column public.closed_dates.venue is
 -- ==========================================================================
 -- 4. allocate_seats_or_throw — add p_venue, branch by seat_layout_mode
 -- ==========================================================================
+-- Drop the old 4-arg signature first. CREATE OR REPLACE only replaces an
+-- exact signature match; adding p_venue makes a different signature, so
+-- both overloads would otherwise coexist and break COMMENT ON FUNCTION
+-- (ambiguous overload). Also leaves a single canonical version.
+drop function if exists public.allocate_seats_or_throw(
+  date, seating_slot, smallint, smallint[]
+);
+
 -- Backwards-compatible: callers that don't pass p_venue still operate on
 -- 'bar' identically (same advisory lock semantics, same numbered allocator).
 create or replace function public.allocate_seats_or_throw(
@@ -250,12 +258,22 @@ begin
 end;
 $$;
 
-comment on function public.allocate_seats_or_throw is
+comment on function public.allocate_seats_or_throw(
+  date, seating_slot, smallint, smallint[], text
+) is
   'Venue-aware atomic seat allocator. capacity_only mode (Restaurant) skips seat numbering and only enforces total head-count.';
 
 -- ==========================================================================
 -- 5. book_reservation_atomic — add p_venue (default 'bar') and persist it
 -- ==========================================================================
+-- Drop the previous 20-arg signature for the same reason as #4.
+drop function if exists public.book_reservation_atomic(
+  uuid, date, seating_slot, timestamptz, smallint,
+  text, text, text, text, text,
+  bigint, smallint, bigint, bigint,
+  text, timestamptz, text, smallint[], jsonb, reservation_status
+);
+
 create or replace function public.book_reservation_atomic(
   p_id                       uuid,
   p_service_date             date,
@@ -317,7 +335,12 @@ begin
 end;
 $$;
 
-comment on function public.book_reservation_atomic is
+comment on function public.book_reservation_atomic(
+  uuid, date, seating_slot, timestamptz, smallint,
+  text, text, text, text, text,
+  bigint, smallint, bigint, bigint,
+  text, timestamptz, text, smallint[], jsonb, reservation_status, text
+) is
   'Venue-aware booking RPC. Defaults p_venue=''bar'' so existing Bar callers work unchanged.';
 
 -- ==========================================================================
