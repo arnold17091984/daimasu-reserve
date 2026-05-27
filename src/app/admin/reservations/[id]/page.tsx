@@ -308,16 +308,20 @@ export default async function ReservationDetailPage({
             return (
               <>
                 <DataRow
-                  label={ti(lang, "コース小計", "Menu subtotal")}
-                  value={formatPHP(r.menu_subtotal_centavos, lang)}
+                  label={ti(lang, "コース料金 (VAT 込)", "Course price (VAT incl.)")}
+                  value={`${formatPHP(reservation.course_price_centavos, lang)} × ${reservation.party_size} = ${formatPHP(reservation.total_centavos, lang)}`}
                 />
                 <DataRow
-                  label={ti(lang, "サービス料 (10%)", "Service charge (10%)")}
-                  value={formatPHP(r.service_charge_centavos, lang)}
+                  label={ti(lang, "売上 (VAT 除く)", "Gross Sale (VAT-Ex)")}
+                  value={formatPHP(r.menu_subtotal_centavos, lang)}
                 />
                 <DataRow
                   label={ti(lang, "VAT (12%)", "VAT (12%)")}
                   value={formatPHP(r.vat_centavos, lang)}
+                />
+                <DataRow
+                  label={ti(lang, "サービス料 (10%)", "Service charge (10%)")}
+                  value={formatPHP(r.service_charge_centavos, lang)}
                 />
                 <DataRow
                   label={ti(lang, "合計 (税サ込)", "Grand total")}

@@ -1335,11 +1335,15 @@ function ReviewPanel({
         </p>
         <Row
           label={ti("コース料金 (VAT 込)", "Course price (VAT incl.)")}
-          value={`${formatPHP(coursePriceCentavos, lang)} × ${partySize}`}
+          value={`${formatPHP(coursePriceCentavos, lang)} × ${partySize} = ${formatPHP(courseTotal, lang)}`}
         />
         <Row
-          label={ti("メニュー小計", "Menu subtotal")}
-          value={formatPHP(courseTotal, lang)}
+          label={ti("売上 (VAT 除く)", "Gross Sale (VAT-Ex)")}
+          value={formatPHP(receipt.menu_subtotal_centavos, lang)}
+        />
+        <Row
+          label={ti("VAT (12%)", "VAT (12%)")}
+          value={formatPHP(receipt.vat_centavos, lang)}
         />
         <Row
           label={ti("サービス料 (10%)", "Service charge (10%)")}
