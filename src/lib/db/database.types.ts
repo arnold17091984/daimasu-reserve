@@ -20,6 +20,7 @@ import type {
   ReservationMoney,
   RevenueDaily,
   RevenueMonthly,
+  Venue,
 } from "@/lib/db/types";
 
 interface AuditLogRow {
@@ -36,6 +37,14 @@ interface AuditLogRow {
 
 interface ClosedDateRow {
   closed_date: string;
+  /**
+   * Venue this closure applies to. Added by migration 0022. Existing rows
+   * backfill to 'bar'; the PK is still on closed_date alone for back-compat,
+   * so a date can only be closed for one venue at a time today. A future
+   * migration may widen the PK to (venue, closed_date) once all callers
+   * pass venue explicitly.
+   */
+  venue: Venue;
   reason: string | null;
   created_at: string;
 }
@@ -48,6 +57,11 @@ interface AdminOwnerRow {
 
 type ReservationInsert = {
   id?: string;
+  /**
+   * Defaults to 'bar' in the database; only set when inserting a
+   * Restaurant booking through the admin override path.
+   */
+  venue?: Venue;
   service_date: string;
   seating: SeatingSlot;
   service_starts_at: string;
@@ -108,6 +122,7 @@ type AuditLogInsert = {
 
 type ClosedDateInsert = {
   closed_date: string;
+  venue?: Venue;
   reason?: string | null;
 };
 
@@ -173,6 +188,14 @@ export type Database = {
       };
       revenue_monthly: {
         Row: RevenueMonthly;
+        Relationships: [];
+      };
+      revenue_daily_by_venue: {
+        Row: RevenueDaily & { venue: Venue };
+        Relationships: [];
+      };
+      revenue_monthly_by_venue: {
+        Row: RevenueMonthly & { venue: Venue };
         Relationships: [];
       };
       no_show_rate: {
