@@ -25,7 +25,23 @@ interface DayAvailability {
   date: string;
   s1_remaining: number;
   s2_remaining: number;
+  /**
+   * Per-day remaining capacity used by capacity_only venues
+   * (Restaurant). Bar callers can ignore this and continue to read
+   * s1_remaining / s2_remaining; Restaurant ignores those and reads
+   * total_remaining instead because covers across the operating
+   * window share one pool.
+   */
+  total_remaining: number;
   closed: boolean;
+}
+
+interface OperatingHoursPayload {
+  weekday_open: string;
+  weekday_close: string;
+  weekend_open: string;
+  weekend_close: string;
+  slot_interval_minutes: number;
 }
 
 // CORS preflight for cross-origin availability lookups (Restaurant
@@ -59,9 +75,22 @@ export async function GET(req: NextRequest) {
     await Promise.all([
       sb
         .from("restaurant_settings")
-        .select("online_seats")
+        .select(
+          "online_seats,seat_layout_mode,weekday_open_at,weekday_close_at,weekend_open_at,weekend_close_at,slot_interval_minutes"
+        )
         .eq("venue", venue)
-        .maybeSingle<Pick<RestaurantSettings, "online_seats">>(),
+        .maybeSingle<
+          Pick<
+            RestaurantSettings,
+            | "online_seats"
+            | "seat_layout_mode"
+            | "weekday_open_at"
+            | "weekday_close_at"
+            | "weekend_open_at"
+            | "weekend_close_at"
+            | "slot_interval_minutes"
+          >
+        >(),
       sb
         .from("reservations")
         .select("service_date,seating,party_size,status")
@@ -89,12 +118,19 @@ export async function GET(req: NextRequest) {
 
   const onlineSeats = settingsRow?.online_seats ?? 8;
   const closedSet = new Set((closed ?? []).map((c) => c.closed_date));
+  const capacityOnly = settingsRow?.seat_layout_mode === "capacity_only";
 
-  // Sum booked pax per date+seating.
+  // Sum booked pax per date+seating (used by Bar). Also keep a per-date
+  // total so capacity_only venues can compute pool-wide remaining.
   const takenByKey = new Map<string, number>();
+  const takenByDate = new Map<string, number>();
   for (const r of rows ?? []) {
     const key = `${r.service_date}|${r.seating}`;
     takenByKey.set(key, (takenByKey.get(key) ?? 0) + r.party_size);
+    takenByDate.set(
+      r.service_date,
+      (takenByDate.get(r.service_date) ?? 0) + r.party_size
+    );
   }
 
   // Emit one row per calendar date in [from, to]. Iterate in pure UTC
@@ -110,10 +146,12 @@ export async function GET(req: NextRequest) {
     const date = cursor.toISOString().slice(0, 10);
     const s1Taken = takenByKey.get(`${date}|s1`) ?? 0;
     const s2Taken = takenByKey.get(`${date}|s2`) ?? 0;
+    const dayTaken = takenByDate.get(date) ?? 0;
     days.push({
       date,
       s1_remaining: Math.max(0, onlineSeats - s1Taken),
       s2_remaining: Math.max(0, onlineSeats - s2Taken),
+      total_remaining: Math.max(0, onlineSeats - dayTaken),
       // Monday is the bar's weekly closure — surface it the same way
       // owner-marked closures are so the calendar disables it without
       // requiring 52× per-year hand-entries in `closed_dates`.
@@ -122,8 +160,26 @@ export async function GET(req: NextRequest) {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
+  // Operating hours surfaced for capacity_only venues so the dialog
+  // can build its time-grid client-side without a second roundtrip.
+  const operatingHours: OperatingHoursPayload | null = capacityOnly
+    ? {
+        weekday_open: (settingsRow?.weekday_open_at ?? "11:00:00").slice(0, 5),
+        weekday_close: (settingsRow?.weekday_close_at ?? "23:00:00").slice(0, 5),
+        weekend_open: (settingsRow?.weekend_open_at ?? "11:00:00").slice(0, 5),
+        weekend_close: (settingsRow?.weekend_close_at ?? "00:00:00").slice(0, 5),
+        slot_interval_minutes: settingsRow?.slot_interval_minutes ?? 30,
+      }
+    : null;
+
   return NextResponse.json(
-    { ok: true, online_seats: onlineSeats, days },
+    {
+      ok: true,
+      online_seats: onlineSeats,
+      seat_layout_mode: settingsRow?.seat_layout_mode ?? "numbered",
+      operating_hours: operatingHours,
+      days,
+    },
     {
       // Short cache — availability changes on every booking, but a 30s
       // window keeps the form snappy without showing stale-by-minutes data.

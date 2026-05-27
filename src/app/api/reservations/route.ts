@@ -30,6 +30,7 @@ import { clientKey, limit, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { createReservationSchema } from "@/lib/domain/schemas";
 import {
   serviceStartsAt,
+  serviceStartsAtFromTime,
   priceBreakdown,
   isClosedWeekday,
 } from "@/lib/domain/reservation";
@@ -161,7 +162,14 @@ async function postImpl(req: NextRequest) {
   //    deposit=0, balance=total, deposit_pct=0 so the row truthfully reflects
   //    "nothing has been charged, balance is the full course total".
   const depositRequired = isDepositRequired();
-  const startsAt = serviceStartsAt(input.service_date, input.seating, settings);
+  // Restaurant venue: when the dialog supplies an explicit service_time
+  // (HH:MM picked from the operating-hours grid), override the
+  // settings-based seating time. Bar (numbered) ignores service_time
+  // and keeps the existing seating_X_starts_at lookup.
+  const startsAt =
+    input.service_time
+      ? serviceStartsAtFromTime(input.service_date, input.service_time)
+      : serviceStartsAt(input.service_date, input.seating, settings);
   const breakdown = priceBreakdown(
     settings.course_price_centavos,
     input.party_size,

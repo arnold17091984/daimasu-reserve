@@ -36,6 +36,26 @@ export function serviceStartsAt(
   return new Date(`${date}T${hhmm}:00Z`);
 }
 
+/**
+ * Build a service-start Date from an explicit user-picked HH:MM time
+ * (used by Restaurant where guests pick any arrival time within the
+ * operating window). Always uses Asia/Manila — the only timezone the
+ * Restaurant currently operates in.
+ *
+ * A close time of "00:00" (midnight) means "next day at 00:00". We
+ * intentionally do NOT wrap the date here; the dialog is expected to
+ * surface the close moment as 00:00 of the *next* calendar day if it
+ * ever offers a midnight slot, so callers should not see service_time
+ * = "00:00" with a same-day service_date.
+ */
+export function serviceStartsAtFromTime(
+  date: string,
+  serviceTime: string
+): Date {
+  const hhmm = serviceTime.slice(0, 5);
+  return new Date(`${date}T${hhmm}:00+08:00`);
+}
+
 /** Hours between `now` and the booking's service start (negative if past). */
 export function hoursUntilService(
   serviceStartsAt: Date,

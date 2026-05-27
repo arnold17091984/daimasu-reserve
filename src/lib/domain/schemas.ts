@@ -130,6 +130,15 @@ export const createReservationSchema = z.object({
   // working without sending the field. Restaurant bookings posted from
   // daimasu.com.ph send venue='restaurant'.
   venue: z.enum(["bar", "restaurant"]).default("bar"),
+  // Free arrival time for capacity_only venues (Restaurant). When
+  // present the API uses this HH:MM to build service_starts_at instead
+  // of looking up settings.seating_X_starts_at. Bar submits omit it.
+  // Validated as 24h HH:MM (with optional :SS) so the API can parse it
+  // directly into a PG `time`.
+  service_time: z
+    .string()
+    .regex(/^([0-1]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "service_time must be HH:MM")
+    .optional(),
 });
 
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;

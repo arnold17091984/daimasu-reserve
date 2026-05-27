@@ -81,6 +81,17 @@ export interface RestaurantSettings {
   monthly_revenue_target_centavos: number;
   display_name: string;
   reservations_open: boolean;
+  /**
+   * Per-venue operating hours for capacity_only venues (Restaurant).
+   * Bar ignores these and uses seating_1_starts_at / seating_2_starts_at.
+   * Added by migration 0024 — defaults: weekday 11:00–23:00, weekend
+   * 11:00–24:00 (00:00:00 = midnight wrap to next day), 30-min slots.
+   */
+  weekday_open_at: string; // 'HH:MM' or 'HH:MM:SS'
+  weekday_close_at: string;
+  weekend_open_at: string;
+  weekend_close_at: string;
+  slot_interval_minutes: number;
   updated_at: string;
 }
 
