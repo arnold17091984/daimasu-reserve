@@ -15,8 +15,10 @@ import {
 import { getAdmin } from "@/lib/auth/admin";
 import { getAdminLang, ti } from "@/lib/auth/admin-lang";
 import { getAdminTheme } from "@/lib/auth/admin-theme";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { LangToggle } from "./lang-toggle";
 import { ThemeToggle } from "./theme-toggle";
+import { VenueToggle } from "./venue-toggle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +31,7 @@ export default async function AdminLayout({
   const admin = await getAdmin();
   const lang = await getAdminLang();
   const theme = await getAdminTheme();
+  const venue = await getAdminVenue();
 
   return (
     <div data-admin-theme={theme} className="min-h-screen bg-background text-foreground">
@@ -54,6 +57,7 @@ export default async function AdminLayout({
               />
             </Link>
             <div className="flex items-center gap-3">
+              <VenueToggle current={venue} />
               <ThemeToggle current={theme} />
               <LangToggle current={lang} />
             </div>
@@ -154,6 +158,15 @@ export default async function AdminLayout({
               <p className="truncate text-text-secondary" title={admin.email}>
                 {admin.email}
               </p>
+              {/* Venue switcher on its own row — the most prominent toggle
+                  in the sidebar so the operator always sees which venue
+                  they are editing. */}
+              <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-3">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-text-secondary">
+                  {ti(lang, "会場", "Venue")}
+                </span>
+                <VenueToggle current={venue} />
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <ThemeToggle current={theme} />
                 <LangToggle current={lang} />

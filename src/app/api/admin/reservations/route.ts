@@ -12,6 +12,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { getAdmin } from "@/lib/auth/admin";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminCreateReservationSchema } from "@/lib/domain/schemas";
 import {
   serviceStartsAt,
@@ -63,11 +64,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Phase 1c: load the active venue's settings + thread venue through
+  // book_reservation_atomic so the row lands in the right venue and the
+  // capacity / closure checks consult the matching settings row.
+  const venue = await getAdminVenue();
   const sb = adminClient();
   const { data: settings } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", venue)
     .single<RestaurantSettings>();
   if (!settings) {
     return NextResponse.json(
@@ -129,6 +134,7 @@ export async function POST(req: NextRequest) {
           ? input.celebration
           : null,
       p_status: "confirmed",
+      p_venue: venue,
     })
     .single<Reservation>();
   if (bookErr) {
@@ -167,11 +173,12 @@ export async function POST(req: NextRequest) {
     reservation_id: reservationId,
     action: "reservation.create",
     after_data: {
+      venue,
       source: input.source,
       deposit_received: input.deposit_received,
       party_size: input.party_size,
     } as never,
-    reason: `manual booking (${input.source})`,
+    reason: `manual booking (${input.source}) — venue=${venue}`,
   });
 
   return NextResponse.json(

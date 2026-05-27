@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Sparkles, AlertTriangle, ArrowRight, Cake, Wine, Gift, MonitorPlay, Camera, Music, Phone, Package } from "lucide-react";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminClient } from "@/lib/db/clients";
 import type { Reservation } from "@/lib/db/types";
 import { celebrationLabels } from "../_components/celebration-display";
@@ -18,13 +19,16 @@ export const dynamic = "force-dynamic";
 
 export default async function CelebrationsPage() {
   const lang = await getAdminLang();
+  const venue = await getAdminVenue();
   const today = todayIsoDate();
 
   await requireAdminOrRedirect();
   const sb = adminClient();
+  // Phase 1b: scope celebrations to the currently-selected venue.
   const { data } = await sb
     .from("reservations")
     .select("*")
+    .eq("venue", venue)
     .gte("service_date", today)
     .in("status", ["pending_payment", "confirmed"])
     .not("celebration", "is", null)
@@ -58,6 +62,9 @@ export default async function CelebrationsPage() {
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="font-[family-name:var(--font-noto-serif)] text-2xl tracking-[0.02em] text-foreground">
           {ti(lang, "お祝い・サプライズ管理", "Celebrations")}
+          <span className="ml-3 align-middle text-[12px] font-medium uppercase tracking-[0.16em] text-gold">
+            · {venue}
+          </span>
         </h1>
       </div>
 

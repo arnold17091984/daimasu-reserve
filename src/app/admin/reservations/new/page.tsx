@@ -13,6 +13,7 @@
  */
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti } from "@/lib/auth/admin-lang";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminClient } from "@/lib/db/clients";
 import { isClosedWeekday } from "@/lib/domain/reservation";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
@@ -27,6 +28,7 @@ export default async function NewReservationPage({
   searchParams: Promise<{ date?: string; seating?: string }>;
 }) {
   const lang = await getAdminLang();
+  const venue = await getAdminVenue();
   const sp = await searchParams;
 
   // Per-date+seating occupancy. Each entry holds:
@@ -64,16 +66,20 @@ export default async function NewReservationPage({
 
   await requireAdminOrRedirect();
   const sb = adminClient();
+  // Phase 1b: every read is scoped to the currently-selected venue so the
+  // capacity grid + price/deposit display match the venue the operator is
+  // booking into.
   const [{ data: settingsRow }, { data: rows }, { data: closed }] =
     await Promise.all([
       sb
         .from("restaurant_settings")
         .select("*")
-        .eq("id", 1)
+        .eq("venue", venue)
         .single<RestaurantSettings>(),
       sb
         .from("reservations")
         .select("service_date,seating,party_size,status,seat_numbers,guest_name")
+        .eq("venue", venue)
         .gte("service_date", today)
         .lte("service_date", horizon)
         .in("status", ["confirmed", "pending_payment"])
@@ -86,6 +92,7 @@ export default async function NewReservationPage({
       sb
         .from("closed_dates")
         .select("closed_date")
+        .eq("venue", venue)
         .gte("closed_date", today)
         .lte("closed_date", horizon)
         .returns<{ closed_date: string }[]>(),
@@ -135,6 +142,9 @@ export default async function NewReservationPage({
     <div className="px-4 py-6 sm:px-6 lg:px-8">
       <h1 className="mb-3 font-[family-name:var(--font-noto-serif)] text-2xl tracking-[0.02em] text-foreground">
         {ti(lang, "新規予約 (店舗側)", "New booking (owner-side)")}
+        <span className="ml-3 align-middle text-[12px] font-medium uppercase tracking-[0.16em] text-gold">
+          · {venue}
+        </span>
       </h1>
       <p className="mb-6 max-w-2xl admin-body text-text-secondary">
         {ti(

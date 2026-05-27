@@ -6,6 +6,21 @@
 
 export type SeatingSlot = "s1" | "s2";
 
+/**
+ * Venue slug — discriminator for the multi-venue support added in
+ * migration 0022_multi_venue.sql. Bar uses numbered seat assignment on a
+ * fixed 8-seat counter; Restaurant uses capacity_only mode where only
+ * the total head-count is enforced.
+ *
+ * Defaults to 'bar' everywhere so historical single-venue code paths
+ * keep their original behaviour.
+ */
+export type Venue = "bar" | "restaurant";
+
+export const VENUES: readonly Venue[] = ["bar", "restaurant"] as const;
+
+export type SeatLayoutMode = "numbered" | "capacity_only";
+
 export type ReservationStatus =
   | "pending_payment"
   | "confirmed"
@@ -28,7 +43,23 @@ export type PaymentKind =
 export type PaymentProvider = "stripe" | "paymongo" | "on_site";
 
 export interface RestaurantSettings {
-  id: 1;
+  /**
+   * Numeric PK kept for back-compat with the original single-row table.
+   * id=1 is Bar, id=2 is Restaurant. New venues would increment from there.
+   * Phase 1+ queries should prefer `venue` for selection.
+   */
+  id: number;
+  /**
+   * Venue slug. Added by migration 0022. Existing Bar row is venue='bar';
+   * the seeded Restaurant row is venue='restaurant'.
+   */
+  venue: Venue;
+  /**
+   * Seat layout strategy. 'numbered' = Bar's 8-seat counter with per-seat
+   * assignment. 'capacity_only' = Restaurant tables — only total
+   * head-count is enforced, no seat numbers are written.
+   */
+  seat_layout_mode: SeatLayoutMode;
   total_seats: number;
   online_seats: number;
   seating_1_label: string;
@@ -80,6 +111,13 @@ export interface DietaryInfo {
 
 export interface Reservation {
   id: string;
+  /**
+   * Which venue this booking belongs to. Defaults to 'bar' for all rows
+   * created before migration 0022. The public booking flow at
+   * reserve.daimasu.com.ph keeps creating Bar bookings; Restaurant
+   * bookings come in via the daimasu.com.ph LP with venue='restaurant'.
+   */
+  venue: Venue;
   service_date: string; // 'YYYY-MM-DD'
   seating: SeatingSlot;
   service_starts_at: string; // ISO

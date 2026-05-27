@@ -73,6 +73,23 @@ const schema = z.object({
   // Public site URL (used in email templates + Stripe redirect)
   NEXT_PUBLIC_SITE_URL: z.string().url().default("https://reserve.daimasu.com.ph"),
 
+  // Cross-origin booking allowed origins. Comma-separated absolute URLs
+  // (no trailing slash). The marketing site at daimasu.com.ph posts
+  // venue=restaurant bookings to /api/reservations; without an explicit
+  // CORS allowlist the browser would block the response. Local dev gets
+  // an extra "http://localhost:3000" entry by default so the LP can be
+  // exercised against a local Reserve server. Keep this list TIGHT —
+  // every entry is permitted to call the booking API cross-origin.
+  RESERVATIONS_ALLOWED_ORIGINS: z
+    .string()
+    .default("https://daimasu.com.ph,https://www.daimasu.com.ph,http://localhost:3000")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((o) => o.trim())
+        .filter((o) => o.length > 0)
+    ),
+
   // Restaurant timezone — overridable; default Asia/Manila
   RESTAURANT_TIMEZONE: z.string().default("Asia/Manila"),
 
