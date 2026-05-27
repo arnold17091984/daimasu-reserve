@@ -47,20 +47,30 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
   const lang = reservation.guest_lang;
   const t = (ja: string, en: string) => (lang === "ja" ? ja : en);
 
-  const depositFlow = isDepositRequired();
   const isPending = reservation.status === "pending_payment";
 
   // BIR-compliant breakdown: course_price is VAT-INCL, 10% SC layered on
   // top at the restaurant. The on-site balance the guest will actually
   // owe is grand_total - deposit_already_paid, NOT the menu-only
   // `balance_centavos` snapshot stored on the reservation row.
+  //
+  // Deposit-free flow nuance: the reservation row stores
+  // `deposit_centavos = 0` / `deposit_pct = 0` because no Stripe charge
+  // was taken, but staff still collect 50% out-of-band. The UI copy
+  // promises "50% deposit (staff will contact)" + "balance on arrival",
+  // so we must compute an IMPLIED 50% deposit instead of letting the
+  // 0 leak through (Codex P2 2026-05-27).
   const receipt = receiptBreakdown(
     reservation.course_price_centavos,
     reservation.party_size,
-    reservation.deposit_pct
+    reservation.deposit_pct,
   );
-  const onSiteBalance =
-    receipt.grand_total_centavos - reservation.deposit_centavos;
+  const depositFlow = isDepositRequired();
+  const impliedDeposit =
+    depositFlow
+      ? reservation.deposit_centavos
+      : Math.floor(reservation.total_centavos / 2);
+  const onSiteBalance = receipt.grand_total_centavos - impliedDeposit;
 
   return (
     <main className="min-h-screen bg-background">
@@ -125,7 +135,7 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
                 <Row
                   icon={<Wallet size={16} aria-hidden="true" />}
                   label={t("50% デポジット (お支払い手続きはスタッフよりご連絡)", "50% deposit (staff will contact)")}
-                  value={formatPHP(reservation.deposit_centavos, lang)}
+                  value={formatPHP(impliedDeposit, lang)}
                 />
                 <Row
                   icon={<Wallet size={16} className="opacity-50" aria-hidden="true" />}

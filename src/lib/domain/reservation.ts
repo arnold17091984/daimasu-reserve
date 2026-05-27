@@ -99,16 +99,25 @@ export function statusAfterCancel(tier: RefundTier): ReservationStatus {
   }
 }
 
-/** Centavos -> "₱8,000" style display.
+/** Centavos -> "₱8,000.00" style display.
  *  Uses narrowSymbol so the ₱ glyph renders even when the user is in JA locale
- *  (otherwise ja-JP defaults to "PHP" prefix). The business is PH-only. */
+ *  (otherwise ja-JP defaults to "PHP" prefix). The business is PH-only.
+ *
+ *  Always shows 2 decimal places — the BIR-compliant receipt math
+ *  (VAT-incl menu + 10% SC on top, back-derived VAT-Ex) produces
+ *  fractional pesos like ₱8,714.29, ₱714.29, ₱857.14. Truncating to
+ *  whole pesos would quote a different number than the OR settles for
+ *  (Codex 2026-05-27 P2). Clean multiples of 100 render with trailing
+ *  zeros ("₱8,000.00"), which matches Philippine receipt convention.
+ */
 export function formatPHP(centavos: number, locale: "ja" | "en" = "en"): string {
   const peso = centavos / 100;
   return peso.toLocaleString(locale === "ja" ? "ja-JP" : "en-PH", {
     style: "currency",
     currency: "PHP",
     currencyDisplay: "narrowSymbol",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 

@@ -11,7 +11,7 @@ import {
   COUNTRY_CODES,
   COUNTRY_OTHER,
 } from "@/lib/constants";
-import { receiptBreakdown } from "@/lib/domain/reservation";
+import { formatPHP, receiptBreakdown } from "@/lib/domain/reservation";
 import { publicEnv } from "@/lib/env";
 
 const DEPOSIT_REQUIRED = publicEnv.depositRequired;
@@ -603,19 +603,13 @@ export default function ReservationForm() {
             // 0 so balance == grand_total and the field is unused here.
             const r = receiptBreakdown(COURSE_PRICE.amountCentavos, n, 0);
             const gross_menu = COURSE_PRICE.amountCentavos * n;
-            const fmt = (c: number) =>
-              new Intl.NumberFormat(lang === "ja" ? "ja-JP" : "en-PH", {
-                style: "currency",
-                currency: "PHP",
-                maximumFractionDigits: 0,
-              }).format(c / 100);
             return (
               <p className="text-[12px] leading-relaxed text-text-secondary">
                 {t(
-                  `${n}名様 → コース ${fmt(gross_menu)} (VAT 込) + サービス料10% ${fmt(r.service_charge_centavos)} = `,
-                  `${n} guest${n > 1 ? "s" : ""} → course ${fmt(gross_menu)} (VAT incl.) + service 10% ${fmt(r.service_charge_centavos)} = `
+                  `${n}名様 → コース ${formatPHP(gross_menu, lang)} (VAT 込) + サービス料10% ${formatPHP(r.service_charge_centavos, lang)} = `,
+                  `${n} guest${n > 1 ? "s" : ""} → course ${formatPHP(gross_menu, lang)} (VAT incl.) + service 10% ${formatPHP(r.service_charge_centavos, lang)} = `
                 )}
-                <span className="font-semibold text-gold">{fmt(r.grand_total_centavos)}</span>
+                <span className="font-semibold text-gold">{formatPHP(r.grand_total_centavos, lang)}</span>
               </p>
             );
           })()}
