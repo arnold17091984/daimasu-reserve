@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { adminClient } from "@/lib/db/clients";
 import { getAdmin } from "@/lib/auth/admin";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,17 +84,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Phase 1c: the venue cookie picks which venue's settings row gets
+  // updated. Default 'bar' so any legacy admin tab still updates Bar.
+  const venue = await getAdminVenue();
   const sb = adminClient();
   const { data: before } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", venue)
     .single();
 
   const { error } = await sb
     .from("restaurant_settings")
     .update(parsed.data)
-    .eq("id", 1);
+    .eq("venue", venue);
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
@@ -102,7 +106,7 @@ export async function POST(req: NextRequest) {
     actor: admin.email,
     action: "settings.update",
     before_data: before as never,
-    after_data: parsed.data as never,
+    after_data: { ...parsed.data, venue } as never,
   });
 
   return NextResponse.json({ ok: true });
