@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminClient } from "@/lib/db/clients";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
 import { PrintButton } from "./print-button";
@@ -29,6 +30,7 @@ export default async function TodayServiceSheetPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const lang = await getAdminLang();
+  const venue = await getAdminVenue();
   const sp = await searchParams;
   const date = sp.date ?? todayIsoDate();
 
@@ -36,15 +38,17 @@ export default async function TodayServiceSheetPage({
 
   await requireAdminOrRedirect();
   const sb = adminClient();
+  // Phase 1b: load the active venue's settings + its bookings for the day.
   const [{ data: settingsRow }, { data: rRows }] = await Promise.all([
     sb
       .from("restaurant_settings")
       .select("*")
-      .eq("id", 1)
+      .eq("venue", venue)
       .single<RestaurantSettings>(),
     sb
       .from("reservations")
       .select("*")
+      .eq("venue", venue)
       .eq("service_date", date)
       .in("status", ["confirmed", "completed", "no_show"])
       .order("service_starts_at", { ascending: true })
@@ -137,7 +141,7 @@ export default async function TodayServiceSheetPage({
         <header className="mb-6 flex flex-wrap items-baseline justify-between gap-3 border-b border-border pb-4 print:border-black/30">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-gold print:text-black/70">
-              DAIMASU BAR · {ti(lang, "サービス表", "Service sheet")}
+              {settings.display_name} · {ti(lang, "サービス表", "Service sheet")}
             </p>
             <h2 className="mt-1 font-[family-name:var(--font-noto-serif)] text-2xl tracking-[0.04em] print:text-3xl">
               {dateLabel}

@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminClient } from "@/lib/db/clients";
 import { formatPHP } from "@/lib/domain/reservation";
 import type { Reservation } from "@/lib/db/types";
@@ -32,6 +33,7 @@ export default async function AdminReservationsPage({
   searchParams: Promise<{ filter?: string; q?: string; page?: string }>;
 }) {
   const lang = await getAdminLang();
+  const venue = await getAdminVenue();
   const sp = await searchParams;
   const filter = (FILTERS.find((f) => f.key === sp.filter)?.key ??
     "upcoming") as FilterKey;
@@ -42,7 +44,12 @@ export default async function AdminReservationsPage({
 
   await requireAdminOrRedirect();
   const sb = adminClient();
-  let q = sb.from("reservations").select("*", { count: "exact" });
+  // Phase 1b: scope the list to the currently-selected venue. The filter
+  // chain below adds status / date conditions on top.
+  let q = sb
+    .from("reservations")
+    .select("*", { count: "exact" })
+    .eq("venue", venue);
   switch (filter) {
     case "upcoming":
       q = q
@@ -80,6 +87,9 @@ export default async function AdminReservationsPage({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-[family-name:var(--font-noto-serif)] text-2xl tracking-[0.02em] text-foreground">
           {ti(lang, "予約一覧", "Reservations")}
+          <span className="ml-3 align-middle text-[12px] font-medium uppercase tracking-[0.16em] text-gold">
+            · {venue}
+          </span>
         </h1>
         <Link
           href="/admin/reservations/new"

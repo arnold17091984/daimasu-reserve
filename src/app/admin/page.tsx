@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminClient } from "@/lib/db/clients";
 import { formatPHP } from "@/lib/domain/reservation";
 import type {
@@ -58,6 +59,7 @@ interface AuditRow {
 
 export default async function AdminDashboardPage() {
   const lang = await getAdminLang();
+  const venue = await getAdminVenue();
   // Server-component snapshot of "now"; the react-hooks/purity rule is a
   // browser-component heuristic that doesn't apply to async server components.
   // eslint-disable-next-line react-hooks/purity
@@ -78,14 +80,27 @@ export default async function AdminDashboardPage() {
   const today = todayIsoDate();
   const dayPlus2 = isoDateDaysAhead(2);
 
-  const [settingsRes, monthlyRes, noShowRes, upcomingRes, unsettledRes, auditsRes, failuresRes] =
+  // Phase 1b: scope settings + reservations + revenue to the selected
+  // venue. audit_log and notification_log stay global — they're action
+  // logs, not venue records, and the operator wants to see all activity
+  // regardless of which venue they're currently editing.
+  const [settingsRes, monthlyRes, upcomingRes, unsettledRes, auditsRes, failuresRes] =
     await Promise.all([
-      sb.from("restaurant_settings").select("*").eq("id", 1).single<RestaurantSettings>(),
-      sb.from("revenue_monthly").select("*").eq("month_start", monthIso).maybeSingle<RevenueMonthly>(),
-      sb.from("no_show_rate").select("*").eq("month_start", monthIso).maybeSingle<NoShowRow>(),
+      sb
+        .from("restaurant_settings")
+        .select("*")
+        .eq("venue", venue)
+        .single<RestaurantSettings>(),
+      sb
+        .from("revenue_monthly_by_venue")
+        .select("*")
+        .eq("venue", venue)
+        .eq("month_start", monthIso)
+        .maybeSingle<RevenueMonthly>(),
       sb
         .from("reservations")
         .select("*")
+        .eq("venue", venue)
         .gte("service_date", today)
         .lte("service_date", dayPlus2)
         .in("status", ["confirmed", "completed"])
@@ -94,6 +109,7 @@ export default async function AdminDashboardPage() {
       sb
         .from("reservations")
         .select("*")
+        .eq("venue", venue)
         .lt("service_date", today)
         .eq("status", "confirmed")
         .order("service_starts_at", { ascending: false })
@@ -116,7 +132,21 @@ export default async function AdminDashboardPage() {
     ]);
   settings = settingsRes.data;
   monthly = monthlyRes.data;
-  noShow = noShowRes.data;
+  // no_show_rate view is still venue-agnostic (built from old revenue_monthly).
+  // Compute the venue-scoped rate inline from the monthly row instead so the
+  // dashboard KPI matches the active venue.
+  if (monthly) {
+    const eligible = Math.max(0, monthly.covers_booked - monthly.cancel_count);
+    noShow = {
+      month_start: monthIso,
+      no_show_count: monthly.no_show_count,
+      eligible_covers: eligible,
+      no_show_rate_pct:
+        eligible > 0
+          ? Math.round((monthly.no_show_count / eligible) * 1000) / 10
+          : 0,
+    };
+  }
   allUpcoming = upcomingRes.data;
   unsettledPast = unsettledRes.data;
   recentAudits = auditsRes.data;
@@ -163,6 +193,9 @@ export default async function AdminDashboardPage() {
         <div>
           <h1 className="font-[family-name:var(--font-noto-serif)] text-2xl tracking-[0.02em] text-foreground">
             {ti(lang, "ダッシュボード", "Dashboard")}
+            <span className="ml-3 align-middle text-[12px] font-medium uppercase tracking-[0.16em] text-gold">
+              · {venue}
+            </span>
           </h1>
           <p className="mt-1 admin-caption">
             {formatToday(lang)}

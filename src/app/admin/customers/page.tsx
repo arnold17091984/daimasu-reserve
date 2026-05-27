@@ -6,6 +6,12 @@
  * stable). The result feeds the operator's "who is this person, have
  * they been before, what did they spend" question that drives upsell.
  *
+ * Multi-venue note (Phase 1b, 2026-05-27): this page intentionally does
+ * NOT filter by the current admin venue. The owner explicitly chose
+ * phone-based unification across Bar + Restaurant so a regular guest
+ * shows up as one person with combined visit history regardless of
+ * which venue is currently selected in the sidebar switcher.
+ *
  * Read-only for now. Filters: search by name / phone / email.
  */
 import Link from "next/link";

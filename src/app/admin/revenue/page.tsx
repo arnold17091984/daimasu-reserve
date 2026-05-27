@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { requireAdminOrRedirect } from "@/lib/auth/admin";
 import { getAdminLang, ti, type AdminLang } from "@/lib/auth/admin-lang";
+import { getAdminVenue } from "@/lib/auth/admin-venue";
 import { adminClient } from "@/lib/db/clients";
 import { formatPHP } from "@/lib/domain/reservation";
 import { isDepositRequired } from "@/lib/env";
@@ -29,6 +30,7 @@ export default async function RevenuePage({
   searchParams: Promise<{ y?: string; m?: string }>;
 }) {
   const lang = await getAdminLang();
+  const venue = await getAdminVenue();
   const sp = await searchParams;
 
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
@@ -70,16 +72,22 @@ export default async function RevenuePage({
     vat_centavos: number;
     grand_total_centavos: number;
   }
+  // Phase 1b: switched from revenue_daily / revenue_monthly to the
+  // venue-aware _by_venue views (added in migration 0022). The old views
+  // would aggregate across both venues; scoping by .eq("venue", venue)
+  // keeps each venue's analytics independent.
   const [{ data: m }, { data: d }, { data: methodSplit }, { data: brk }] =
     await Promise.all([
       sb
-        .from("revenue_monthly")
+        .from("revenue_monthly_by_venue")
         .select("*")
+        .eq("venue", venue)
         .eq("month_start", monthStart)
         .maybeSingle<RevenueMonthly>(),
       sb
-        .from("revenue_daily")
+        .from("revenue_daily_by_venue")
         .select("*")
+        .eq("venue", venue)
         .gte("service_date", monthStart)
         .lte("service_date", monthEnd)
         .order("service_date", { ascending: true })
@@ -162,6 +170,9 @@ export default async function RevenuePage({
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="font-[family-name:var(--font-noto-serif)] text-2xl tracking-[0.02em] text-foreground">
           {ti(lang, "売上分析", "Revenue")}
+          <span className="ml-3 align-middle text-[12px] font-medium uppercase tracking-[0.16em] text-gold">
+            · {venue}
+          </span>
         </h1>
         <MonthPicker year={targetY} month={targetM} lang={lang} />
       </div>
