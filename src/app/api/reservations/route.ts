@@ -328,25 +328,36 @@ export async function POST(req: NextRequest) {
     }
     bookedRow.affiliate_link_slug = attributedSlug;
     bookedRow.affiliate_coupon_code = attributedCoupon;
-
-    // Public-flow attribution: tell the affiliate side a booking
-    // happened with this slug so it can create the Booking mirror that
-    // the eventual settle webhook will update. The S2S-origin path is
-    // skipped because affiliate creates the mirror itself before
-    // forwarding the booking; firing this for S2S would double-insert.
-    if (!isAffiliateOrigin && attributedSlug) {
-      after(() =>
-        notifyAffiliateAttribution({
-          reservationId,
-          slug: attributedSlug,
-          guestName: input.guest_name,
-          guestPhone: input.guest_phone ?? null,
-          partySize: input.party_size,
-          reservedFor: startsAt.toISOString(),
-        })
-      );
-    }
   }
+
+  // Public-flow attribution: tell the affiliate side a booking
+  // happened with this slug so it can create the Booking mirror that
+  // the eventual settle webhook will update. The S2S-origin path is
+  // skipped because affiliate creates the mirror itself before
+  // forwarding the booking; firing this for S2S would double-insert.
+  //
+  // Codex 2026-05-27 P2: register this AFTER the booking is fully
+  // committed in both code paths (deposit-free row is live; deposit
+  // path requires Stripe Checkout to succeed first). Previously this
+  // ran before the Stripe section, so a Stripe-creation failure could
+  // delete the reservation while the already-queued `after()` still
+  // notified affiliate — leaving a Booking mirror for a row that no
+  // longer existed.
+  const scheduleAttributionWebhook = (): void => {
+    if (isAffiliateOrigin) return;
+    const slug = attributedSlug;
+    if (!slug) return;
+    after(() =>
+      notifyAffiliateAttribution({
+        reservationId,
+        slug,
+        guestName: input.guest_name,
+        guestPhone: input.guest_phone ?? null,
+        partySize: input.party_size,
+        reservedFor: startsAt.toISOString(),
+      }),
+    );
+  };
 
   // 5a. Deposit-free path: row is already committed by the atomic RPC
   // above. Push the side effects (Telegram fan-out, email log, audit
@@ -380,6 +391,7 @@ export async function POST(req: NextRequest) {
         reason: "deposit-free flow — auto-confirmed at booking time",
       });
     });
+    scheduleAttributionWebhook();
     return NextResponse.json(
       {
         ok: true,
@@ -453,6 +465,12 @@ export async function POST(req: NextRequest) {
       502
     );
   }
+
+  // Stripe Checkout created successfully — safe to notify affiliate.
+  // (See scheduleAttributionWebhook comment above for the Codex P2
+  // rationale: registering before the catch above would fire even on
+  // rollback.)
+  scheduleAttributionWebhook();
 
   // Best-effort: token expiry mirrored from JWT exp
   return NextResponse.json(
