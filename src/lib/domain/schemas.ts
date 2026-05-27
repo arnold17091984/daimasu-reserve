@@ -125,6 +125,11 @@ export const createReservationSchema = z.object({
   // seat. Honoured ONLY for S2S (bearer-authed) callers; public submits
   // always get a server-generated id.
   reservation_id: z.string().uuid().optional(),
+  // Venue selector — added with multi-venue support (Phase 0 / migration
+  // 0022). Defaults to 'bar' so all existing Bar booking submits keep
+  // working without sending the field. Restaurant bookings posted from
+  // daimasu.com.ph send venue='restaurant'.
+  venue: z.enum(["bar", "restaurant"]).default("bar"),
 });
 
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;

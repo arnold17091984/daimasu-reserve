@@ -37,8 +37,19 @@ import { serverEnv, isDepositRequired } from "@/lib/env";
 import { sendConfirmationDispatch } from "@/lib/notifications/dispatch";
 import { notifyAffiliateAttribution } from "@/lib/notifications/affiliate-webhook";
 import { verifyAffiliateToken } from "@/lib/security/affiliate-token";
+import { corsHeaders, preflight } from "@/lib/security/cors";
 import { auditInsert } from "@/lib/db/audit";
 import type { Reservation, RestaurantSettings } from "@/lib/db/types";
+
+/**
+ * CORS preflight for cross-origin booking submits (e.g. the Restaurant
+ * booking component on daimasu.com.ph). See src/lib/security/cors.ts —
+ * only origins in RESERVATIONS_ALLOWED_ORIGINS get a 204; everyone else
+ * gets 403 and never sees a successful preflight.
+ */
+export function OPTIONS(req: NextRequest) {
+  return preflight(req);
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +61,21 @@ type ApiError =
   | { code: "reservations_closed" }
   | { code: "internal"; reason?: string };
 
+/**
+ * Public POST handler. Thin wrapper: runs the real implementation, then
+ * decorates every response with CORS headers when the request came from
+ * a whitelisted cross-origin. Keeps the postImpl branches uncluttered.
+ */
 export async function POST(req: NextRequest) {
+  const res = await postImpl(req);
+  const extra = corsHeaders(req);
+  for (const [k, v] of Object.entries(extra)) {
+    res.headers.set(k, v);
+  }
+  return res;
+}
+
+async function postImpl(req: NextRequest) {
   // 0a. Server-to-server origin check. The cast-affiliate app calls this
   // endpoint with `Authorization: Bearer <AFFILIATE_S2S_SECRET>`. A match
   // marks the request affiliate-origin: the per-IP rate-limit is skipped
@@ -110,11 +135,15 @@ export async function POST(req: NextRequest) {
 
   const sb = adminClient();
 
-  // 2. read settings (single row id=1)
+  // 2. read settings for the venue the submit targets. The schema defaults
+  // to 'bar' so legacy Bar submits (which never sent venue) keep landing on
+  // the Bar row. Restaurant bookings from daimasu.com.ph pass
+  // venue='restaurant'.
+  const venue = input.venue;
   const { data: settings, error: settingsErr } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", venue)
     .single<RestaurantSettings>();
   if (settingsErr || !settings) {
     return errJson({ code: "internal", reason: "settings_missing" }, 500);
@@ -192,6 +221,7 @@ export async function POST(req: NextRequest) {
       p_requested_seats: null,
       p_celebration: null,
       p_status: initialStatus,
+      p_venue: venue,
     })
     .single<Reservation>();
   if (bookErr || !bookedRow) {

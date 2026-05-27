@@ -15,7 +15,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { adminClient } from "@/lib/db/clients";
 import { availabilityQuerySchema } from "@/lib/domain/schemas";
 import { isClosedWeekday } from "@/lib/domain/reservation";
-import type { RestaurantSettings } from "@/lib/db/types";
+import { corsHeaders, preflight } from "@/lib/security/cors";
+import type { RestaurantSettings, Venue } from "@/lib/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,12 @@ interface DayAvailability {
   closed: boolean;
 }
 
+// CORS preflight for cross-origin availability lookups (Restaurant
+// booking component on daimasu.com.ph polls this).
+export function OPTIONS(req: NextRequest) {
+  return preflight(req);
+}
+
 export async function GET(req: NextRequest) {
   const parsed = availabilityQuerySchema.safeParse({
     from: req.nextUrl.searchParams.get("from"),
@@ -35,10 +42,16 @@ export async function GET(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: "validation" },
-      { status: 400 }
+      { status: 400, headers: corsHeaders(req) }
     );
   }
   const { from, to } = parsed.data;
+
+  // venue=bar|restaurant — defaults to 'bar' for back-compat with the
+  // existing booking form. Each venue has its own online_seats and its
+  // own bookings, so availability is calculated per venue.
+  const venueParam = req.nextUrl.searchParams.get("venue");
+  const venue: Venue = venueParam === "restaurant" ? "restaurant" : "bar";
 
   const sb = adminClient();
 
@@ -47,11 +60,12 @@ export async function GET(req: NextRequest) {
       sb
         .from("restaurant_settings")
         .select("online_seats")
-        .eq("id", 1)
+        .eq("venue", venue)
         .maybeSingle<Pick<RestaurantSettings, "online_seats">>(),
       sb
         .from("reservations")
         .select("service_date,seating,party_size,status")
+        .eq("venue", venue)
         // confirmed + pending hold a seat; cancelled / no_show free it.
         .in("status", ["confirmed", "pending_payment"])
         .gte("service_date", from)
@@ -67,6 +81,7 @@ export async function GET(req: NextRequest) {
       sb
         .from("closed_dates")
         .select("closed_date")
+        .eq("venue", venue)
         .gte("closed_date", from)
         .lte("closed_date", to)
         .returns<{ closed_date: string }[]>(),
@@ -112,7 +127,7 @@ export async function GET(req: NextRequest) {
     {
       // Short cache — availability changes on every booking, but a 30s
       // window keeps the form snappy without showing stale-by-minutes data.
-      headers: { "Cache-Control": "public, max-age=30" },
+      headers: corsHeaders(req, { "Cache-Control": "public, max-age=30" }),
     }
   );
 }
