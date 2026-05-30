@@ -1,65 +1,26 @@
--- 0024_restaurant_operating_hours.sql — Restaurant flexible time slots
--- ----------------------------------------------------------------------------
--- DAIMASU Restaurant needs free arrival-time selection across an extended
--- operating window (Tue–Thu/Sun: 11:00–23:00, Fri/Sat: 11:00–24:00) rather
--- than the two fixed kaiseki seatings (17:30 / 20:00) the Bar uses.
+-- ============================================================================
+-- 0025_fix_seat_alloc_smallint_generate_series.sql
 --
--- The clean approach is:
---   1. Add weekday/weekend open/close columns to restaurant_settings so the
---      operator can edit operating hours from /admin/settings.
---   2. Add a slot interval so the booking dialog can render a half-hour
---      grid by default but support 60-min/15-min variants later.
---   3. Re-shape the capacity_only branch of allocate_seats_or_throw to
---      count covers per DAY (venue + service_date) instead of per slot
---      (venue + date + seating). For a restaurant the seating column no
---      longer represents a meaningful capacity bucket — guests pick any
---      arrival time within hours, and the cover count rolls up to one
---      whole-day pool. The seating column itself stays (Bar still uses
---      it; Restaurant will canonicalise everything to 's1').
+-- HOTFIX (production-down): every numbered (Bar) booking that reached the
+-- auto-allocate seat path failed with HTTP 500 and the Postgres error:
 --
--- Bar continues to work unchanged because the numbered branch of the
--- allocator is untouched and the new settings columns have defaults that
--- the Bar row simply ignores.
--- ----------------------------------------------------------------------------
-
-begin;
-
--- 1. operating-hours config
-alter table public.restaurant_settings
-  add column if not exists weekday_open_at        time     not null default '11:00',
-  add column if not exists weekday_close_at       time     not null default '23:00',
-  add column if not exists weekend_open_at        time     not null default '11:00',
-  add column if not exists weekend_close_at       time     not null default '00:00:00',
-  add column if not exists slot_interval_minutes  smallint not null default 30
-    check (slot_interval_minutes in (15, 30, 60));
-
-comment on column public.restaurant_settings.weekday_open_at is
-  'For capacity_only venues (Restaurant): operating-hours open time on Tue–Thu/Sun. Bar ignores; uses seating_1_starts_at / seating_2_starts_at instead.';
-comment on column public.restaurant_settings.weekday_close_at is
-  'Operating-hours close on Tue–Thu/Sun. May equal weekend_close_at if midnight closure shared across all weekdays.';
-comment on column public.restaurant_settings.weekend_open_at is
-  'Operating-hours open on Fri/Sat.';
-comment on column public.restaurant_settings.weekend_close_at is
-  'Operating-hours close on Fri/Sat. 00:00:00 = midnight (24:00 in 24h).';
-comment on column public.restaurant_settings.slot_interval_minutes is
-  'Booking-dialog time-grid step (15/30/60). 30 is the default — yields ~24 weekday slots and ~26 weekend slots.';
-
--- 2. Restaurant venue picks up the user-stated operating hours.
-update public.restaurant_settings
-   set weekday_open_at       = '11:00',
-       weekday_close_at      = '23:00',
-       weekend_open_at       = '11:00',
-       weekend_close_at      = '00:00:00',
-       slot_interval_minutes = 30
- where venue = 'restaurant';
-
--- 3. allocate_seats_or_throw: capacity_only branch counts per DAY now.
--- Drop + recreate with the new logic. Same signature as 0022, so all
--- existing callers (admin POST, public POST, admin manual booking) keep
--- compiling without further code changes.
-drop function if exists public.allocate_seats_or_throw(
-  date, seating_slot, smallint, smallint[], text
-);
+--     function generate_series(smallint, smallint) is not unique
+--
+-- Root cause: allocate_seats_or_throw() declares v_start / v_end as smallint
+-- and called generate_series(v_start, v_end). PostgreSQL has no
+-- generate_series(smallint, smallint) overload; smallint is implicitly
+-- castable to int4, int8 AND numeric, none of which is preferred, so the
+-- call is ambiguous and raised "is not unique". This has been latent since
+-- 0011 and was carried forward through 0015 / 0022 / 0024.
+--
+-- Fix: cast the bounds to int so the call resolves unambiguously to
+-- generate_series(int, int); the result is still cast back to smallint[].
+-- Seat numbers are bounded by online_seats (a smallint), so the round-trip
+-- cast is lossless.
+--
+-- Signature is identical to 0024, so a plain CREATE OR REPLACE swaps the
+-- body in place without dropping the function (no dependent-object churn).
+-- ============================================================================
 
 create or replace function public.allocate_seats_or_throw(
   p_service_date date,
@@ -203,6 +164,9 @@ begin
       if v_seat = any(v_taken) then v_ok := false; exit; end if;
     end loop;
     if v_ok then
+      -- Cast bounds to int: generate_series has no (smallint, smallint)
+      -- overload and the implicit cast is ambiguous. int4 resolves cleanly;
+      -- result cast back to smallint[] (seat numbers fit in smallint).
       v_result := array(select generate_series(v_start::int, v_end::int))::smallint[];
       return v_result;
     end if;
@@ -216,6 +180,4 @@ $$;
 comment on function public.allocate_seats_or_throw(
   date, seating_slot, smallint, smallint[], text
 ) is
-  'Venue-aware atomic seat allocator. capacity_only mode (Restaurant) sums covers per (venue, date) ignoring seating, so the whole operating window draws from one pool.';
-
-commit;
+  'Venue-aware atomic seat allocator. capacity_only mode (Restaurant) sums covers per (venue, date) ignoring seating, so the whole operating window draws from one pool. (0025: cast generate_series bounds to int to resolve the ambiguous smallint overload.)';

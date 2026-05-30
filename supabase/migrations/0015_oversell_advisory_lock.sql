@@ -122,7 +122,7 @@ begin
       if v_seat = any(v_taken) then v_ok := false; exit; end if;
     end loop;
     if v_ok then
-      v_result := array(select generate_series(v_start, v_end))::smallint[];
+      v_result := array(select generate_series(v_start::int, v_end::int))::smallint[];
       return v_result;
     end if;
     v_end := v_end - 1;
