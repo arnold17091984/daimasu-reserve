@@ -51,10 +51,12 @@ export async function sendConfirmationDispatch(
   opts: DispatchOptions = {}
 ): Promise<{token: string; expiresAt: Date}> {
   const env = serverEnv();
+  // Multi-venue: the confirmation email + admin Telegram credentials are
+  // per-venue. Read this reservation's venue row, not the Bar row (id=1).
   const { data: settings } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", reservation.venue)
     .single<RestaurantSettings>();
   if (!settings) {
     // Without settings we can't render the email or ping Telegram. Surface

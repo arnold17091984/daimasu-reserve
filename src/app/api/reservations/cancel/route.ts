@@ -108,10 +108,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Multi-venue: refund policy is per-venue. Read THIS reservation's venue
+  // row, not the hardcoded Bar row (id=1) — otherwise a Restaurant cancel
+  // would be priced by Bar's refund thresholds.
   const { data: settings } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", reservation.venue)
     .single<RestaurantSettings>();
   if (!settings) {
     return NextResponse.json({ ok: false, error: "settings_missing" }, { status: 500 });

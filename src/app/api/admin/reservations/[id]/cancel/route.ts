@@ -70,10 +70,12 @@ export async function POST(
     );
   }
 
+  // Multi-venue: read the reservation's own venue settings so the refund
+  // tier uses the correct per-venue policy (not the hardcoded Bar row).
   const { data: settings } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", reservation.venue)
     .single<RestaurantSettings>();
   if (!settings) {
     return NextResponse.json(

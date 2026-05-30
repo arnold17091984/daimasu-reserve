@@ -38,10 +38,12 @@ export default async function ReservationConfirmPage({ searchParams }: PageProps
 
   if (!reservation) return <NotFound />;
 
+  // Multi-venue: show the booked venue's own cancellation/refund policy,
+  // not the hardcoded Bar row.
   const { data: settings } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("venue", reservation.venue)
     .maybeSingle<RestaurantSettings>();
 
   const lang = reservation.guest_lang;

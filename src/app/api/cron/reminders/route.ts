@@ -35,43 +35,66 @@ export async function POST(req: NextRequest) {
   }
 
   const sb = adminClient();
-  const { data: settings } = await sb
+  // Multi-venue: the reminder lead time derives from each venue's own
+  // reminder_long_hours / reminder_short_hours (Bar and Restaurant can
+  // differ). Read every venue's settings and collect due reservations per
+  // venue using that venue's window + sender — applying the Bar row to all
+  // venues would remind Restaurant guests at the wrong lead time and via
+  // the Bar WhatsApp number.
+  const { data: allSettings, error: settingsErr } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
-    .single<RestaurantSettings>();
-  if (!settings) {
+    .returns<RestaurantSettings[]>();
+  if (settingsErr) {
+    return NextResponse.json({ ok: false, error: settingsErr.message }, { status: 500 });
+  }
+  if (!allSettings || allSettings.length === 0) {
     return NextResponse.json({ ok: false, error: "settings_missing" }, { status: 500 });
   }
 
-  const hours = win === "long" ? settings.reminder_long_hours : settings.reminder_short_hours;
-  const now = Date.now();
-  const upper = new Date(now + hours * 3_600_000).toISOString();
-  // 30-min span: catch any reservation crossing the threshold since last run.
-  const lower = new Date(now + (hours - 0.5) * 3_600_000).toISOString();
   const sentColumn =
     win === "long" ? "reminder_long_sent_at" : "reminder_short_sent_at";
+  const now = Date.now();
 
-  const { data: due, error } = await sb
-    .from("reservations")
-    .select("*")
-    .eq("status", "confirmed")
-    .is(sentColumn, null)
-    .gte("service_starts_at", lower)
-    .lte("service_starts_at", upper)
-    .returns<Reservation[]>();
+  // Pair each due reservation with its venue's settings + lead hours so the
+  // processing loop renders the correct copy and uses the right sender.
+  const dueItems: Array<{
+    r: Reservation;
+    hours: number;
+    settings: RestaurantSettings;
+  }> = [];
+  for (const settings of allSettings) {
+    const hours =
+      win === "long" ? settings.reminder_long_hours : settings.reminder_short_hours;
+    const upper = new Date(now + hours * 3_600_000).toISOString();
+    // 30-min span: catch any reservation crossing the threshold since last run.
+    const lower = new Date(now + (hours - 0.5) * 3_600_000).toISOString();
 
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    const { data: due, error } = await sb
+      .from("reservations")
+      .select("*")
+      .eq("venue", settings.venue)
+      .eq("status", "confirmed")
+      .is(sentColumn, null)
+      .gte("service_starts_at", lower)
+      .lte("service_starts_at", upper)
+      .returns<Reservation[]>();
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+    if (due) {
+      for (const r of due) dueItems.push({ r, hours, settings });
+    }
   }
-  if (!due || due.length === 0) {
+
+  if (dueItems.length === 0) {
     return NextResponse.json({ ok: true, sent: 0 });
   }
 
   const env = serverEnv();
   const results: Array<{ id: string; ok: boolean; reason?: string }> = [];
 
-  for (const r of due) {
+  for (const { r, hours, settings } of dueItems) {
     try {
       // Reminder no longer carries a cancel link — the original
       // confirmation email's link is valid for the full reservation
@@ -174,7 +197,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     window: win,
-    attempted: due.length,
+    attempted: dueItems.length,
     succeeded: results.filter((x) => x.ok).length,
     failures: results.filter((x) => !x.ok),
   });

@@ -23,54 +23,64 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   const sb = adminClient();
-  const { data: settings } = await sb
+  // Multi-venue: the no-show grace cutoff is derived from each venue's own
+  // service_minutes (Bar 90 vs Restaurant 120). Read every venue's settings
+  // and process each venue's reservations with its own cutoff — applying the
+  // Bar row to all venues would flip Restaurant guests to no_show too early.
+  const { data: allSettings, error: settingsErr } = await sb
     .from("restaurant_settings")
     .select("*")
-    .eq("id", 1)
-    .single<RestaurantSettings>();
-  if (!settings) {
+    .returns<RestaurantSettings[]>();
+  if (settingsErr) {
+    return NextResponse.json({ ok: false, error: settingsErr.message }, { status: 500 });
+  }
+  if (!allSettings || allSettings.length === 0) {
     return NextResponse.json({ ok: false, error: "settings_missing" }, { status: 500 });
   }
 
-  const graceMinutes = settings.service_minutes; // 90 default
-  const cutoff = new Date(
-    Date.now() - (settings.service_minutes + graceMinutes) * 60_000
-  ).toISOString();
-
-  const { data: stale, error } = await sb
-    .from("reservations")
-    .select("*")
-    .eq("status", "confirmed")
-    .is("settled_at", null)
-    .lt("service_starts_at", cutoff)
-    .returns<Reservation[]>();
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-  if (!stale || stale.length === 0) {
-    return NextResponse.json({ ok: true, marked: 0 });
-  }
-
-  const ids = stale.map((r) => r.id);
   const nowIso = new Date().toISOString();
-  // .select() so we act on the rows ACTUALLY transitioned — a concurrent
-  // settle / manual no-show between the read above and this update could
-  // otherwise make the pre-update `stale` list wrong.
-  const { data: flipped, error: updErr } = await sb
-    .from("reservations")
-    .update({
-      status: "no_show",
-      cancelled_at: nowIso,
-      cancelled_by: "system",
-    })
-    .in("id", ids)
-    .eq("status", "confirmed")
-    .select("*")
-    .returns<Reservation[]>();
-  if (updErr) {
-    return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+  const flippedRows: Reservation[] = [];
+
+  for (const settings of allSettings) {
+    const graceMinutes = settings.service_minutes; // grace == one service window
+    const cutoff = new Date(
+      Date.now() - (settings.service_minutes + graceMinutes) * 60_000
+    ).toISOString();
+
+    const { data: stale, error } = await sb
+      .from("reservations")
+      .select("*")
+      .eq("venue", settings.venue)
+      .eq("status", "confirmed")
+      .is("settled_at", null)
+      .lt("service_starts_at", cutoff)
+      .returns<Reservation[]>();
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+    if (!stale || stale.length === 0) continue;
+
+    const ids = stale.map((r) => r.id);
+    // .select() so we act on the rows ACTUALLY transitioned — a concurrent
+    // settle / manual no-show between the read above and this update could
+    // otherwise make the pre-update `stale` list wrong.
+    const { data: flipped, error: updErr } = await sb
+      .from("reservations")
+      .update({
+        status: "no_show",
+        cancelled_at: nowIso,
+        cancelled_by: "system",
+      })
+      .in("id", ids)
+      .eq("status", "confirmed")
+      .select("*")
+      .returns<Reservation[]>();
+    if (updErr) {
+      return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+    }
+    if (flipped) flippedRows.push(...flipped);
   }
-  const flippedRows = flipped ?? [];
+
   const flippedIds = flippedRows.map((r) => r.id);
 
   // Bulk audit — only the rows actually transitioned.

@@ -55,6 +55,12 @@ export async function GET(
   const endsAt = new Date(startsAt.getTime() + 100 * 60_000);
 
   const lang = r.guest_lang;
+  // Venue-aware event title — Restaurant bookings must not be labeled "BAR".
+  const venueName = r.venue === "restaurant" ? "Restaurant" : "BAR";
+  const summaryText =
+    lang === "ja"
+      ? `DAIMASU 大桝 ${venueName} — 懐石ディナー`
+      : `DAIMASU 大桝 ${venueName} — Kaiseki dinner`;
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -66,11 +72,7 @@ export async function GET(
     `DTSTAMP:${ical(new Date())}`,
     `DTSTART:${ical(startsAt)}`,
     `DTEND:${ical(endsAt)}`,
-    `SUMMARY:${escIcs(
-      lang === "ja"
-        ? "DAIMASU 大桝 BAR — 懐石ディナー"
-        : "DAIMASU 大桝 BAR — Kaiseki dinner"
-    )}`,
+    `SUMMARY:${escIcs(summaryText)}`,
     `LOCATION:${escIcs(CONTACT.address.full[lang])}`,
     `DESCRIPTION:${escIcs(
       lang === "ja"
