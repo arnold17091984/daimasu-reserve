@@ -65,6 +65,21 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Coerce a datetime string to strict RFC3339 'Z' form. A Postgres
+ * timestamptz read via supabase-js (e.g. reservation.service_starts_at)
+ * comes back with a numeric offset ("2026-06-19T09:30:00+00:00"), which
+ * the affiliate receiver validates with z.string().datetime() — that
+ * rejects offsets ("Invalid datetime"), silently dropping the commission.
+ * toISOString() normalizes to the 'Z' form the receiver accepts. Invalid
+ * input is passed through unchanged so the receiver still surfaces a clear
+ * rejection rather than this throwing.
+ */
+function toIsoZ(value: string): string {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toISOString();
+}
+
+/**
  * POST a signed affiliate event. No-ops silently when the integration
  * isn't configured (no URL / no secret) or the reservation carries no
  * affiliate attribution. Safe to call unconditionally from settle /
@@ -80,7 +95,18 @@ export async function notifyAffiliate(event: AffiliateEvent): Promise<void> {
   const secret = env.AFFILIATE_S2S_SECRET;
   if (!url || !secret) return;
 
-  const body = JSON.stringify(event);
+  // Normalize datetime fields to the strict 'Z' form the affiliate
+  // receiver requires. service_starts_at passed straight from Postgres
+  // carries a numeric offset that z.string().datetime() rejects, which
+  // would silently drop the cast's commission (root cause 2026-05-31).
+  const normalized = {
+    ...event,
+    occurred_at: toIsoZ(event.occurred_at),
+    ...(event.reserved_for
+      ? { reserved_for: toIsoZ(event.reserved_for) }
+      : {}),
+  };
+  const body = JSON.stringify(normalized);
   const signature = createHmac("sha256", secret).update(body).digest("hex");
 
   let lastError = "";
@@ -205,7 +231,7 @@ export async function notifyAffiliateAttribution(args: {
     guest_name: args.guestName,
     guest_phone: args.guestPhone,
     party_size: args.partySize,
-    reserved_for: args.reservedFor,
+    reserved_for: toIsoZ(args.reservedFor),
     occurred_at: new Date().toISOString(),
   };
   const body = JSON.stringify(event);
