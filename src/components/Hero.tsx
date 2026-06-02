@@ -29,8 +29,34 @@ export default function Hero() {
     // header heights set in Header.tsx (h-32 / sm:h-36).
     <section className="relative flex min-h-screen items-center justify-center overflow-hidden pt-32 sm:pt-36">
       <div className="absolute inset-0" style={{ contain: "paint" }} aria-hidden="true">
+        {/* Poster still behind everything — the reduced-motion fallback
+            (both videos are display:none under prefers-reduced-motion) and
+            the first paint before the reel buffers. */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url(/videos/hero-poster.jpg)" }}
+        />
+        {/* PC-only ambient backdrop: the same reel, scaled + blurred, fills
+            the wide desktop hero so the 9:16 vertical video never has to be
+            hard-cropped. Mobile fills edge-to-edge with the sharp layer
+            below, so this is lg-only — one video decode on phones. */}
         <video
-          className="hero-bg-video absolute inset-0 h-full w-full object-cover"
+          className="hero-bg-video absolute inset-0 hidden h-full w-full scale-110 object-cover blur-2xl lg:block"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          tabIndex={-1}
+        >
+          <source src="/videos/hero-reel-720.mp4" type="video/mp4" />
+        </video>
+        {/* Sharp reel. Mobile: full-bleed cover (the reel is shot for
+            phones, so it fills beautifully). Desktop: contained + centered
+            so the whole vertical composition shows over the blurred
+            backdrop instead of a zoomed centre slice. */}
+        <video
+          className="hero-bg-video absolute inset-0 h-full w-full object-cover lg:object-contain"
           autoPlay
           muted
           loop
@@ -38,11 +64,11 @@ export default function Hero() {
           preload="auto"
           poster="/videos/hero-poster.jpg"
         >
-          <source src="/videos/hero-highlight-720.mp4" media="(max-width: 768px)" type="video/mp4" />
-          <source src="/videos/hero-highlight-1080.mp4" type="video/mp4" />
+          <source src="/videos/hero-reel-720.mp4" media="(max-width: 768px)" type="video/mp4" />
+          <source src="/videos/hero-reel-1080.mp4" type="video/mp4" />
         </video>
-        {/* Darken video so body/price text retains contrast against bright scenes (flame, surf). */}
-        <div className="absolute inset-0 bg-black/60" />
+        {/* Darken so body/price/CTA text keeps contrast over bright scenes. */}
+        <div className="absolute inset-0 bg-black/50" />
         {/* Top-fade gradient — sits above the global darken so the white logo
             and nav have a deep-black backdrop without flattening the rest of
             the video. Heights tuned to cover the h-32 / sm:h-36 header. */}
