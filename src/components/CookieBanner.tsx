@@ -58,33 +58,33 @@ export function CookieBanner() {
       role="dialog"
       aria-modal="false"
       aria-label="Cookie consent"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-gold/40 bg-background/98 backdrop-blur-md"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-gold/20 bg-background/95 backdrop-blur-md"
     >
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:gap-6 lg:px-12">
-        <p className="flex-1 text-[13px] leading-relaxed text-text-secondary">
+      <div className="mx-auto flex max-w-6xl flex-col gap-2.5 px-5 py-3 sm:flex-row sm:items-center sm:gap-4 lg:px-12">
+        <p className="flex-1 text-[12px] leading-relaxed text-text-muted">
           {t(
             <>
               当サイトは予約処理に必要な Cookie のほか、サービス改善のための匿名化された分析 Cookie を使用します。詳細は
               {" "}
-              <a href="/privacy" className="text-gold underline underline-offset-2 hover:text-gold-light">プライバシーポリシー</a>
+              <a href="/privacy" className="text-text-secondary underline underline-offset-2 hover:text-gold">プライバシーポリシー</a>
               {" "} をご覧ください。
             </>,
             <>
               We use cookies essential to your reservation, plus anonymous analytics to improve our service. See our
               {" "}
-              <a href="/privacy" className="text-gold underline underline-offset-2 hover:text-gold-light">Privacy Policy</a>
+              <a href="/privacy" className="text-text-secondary underline underline-offset-2 hover:text-gold">Privacy Policy</a>
               {" "} for details.
             </>
           )}
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+        <div className="flex shrink-0 items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => {
               write("essential");
               setDismissed("essential");
             }}
-            className="border border-gold/60 bg-transparent px-5 py-2.5 text-[13px] font-medium tracking-[0.06em] text-gold transition-colors hover:bg-gold/10"
+            className="px-2 py-1.5 text-[12px] text-text-muted underline underline-offset-2 transition-colors hover:text-text-secondary"
           >
             {t("必須のみ", "Essential only")}
           </button>
@@ -94,7 +94,7 @@ export function CookieBanner() {
               write("all");
               setDismissed("all");
             }}
-            className="btn-gold-ornate px-5 py-2.5 font-[family-name:var(--font-noto-serif)] text-[13px] font-medium tracking-[0.08em]"
+            className="border border-gold/50 px-4 py-1.5 text-[12px] font-medium tracking-[0.04em] text-gold transition-colors hover:bg-gold/10"
           >
             {t("すべて許可", "Accept all")}
           </button>
