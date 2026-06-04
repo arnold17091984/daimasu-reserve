@@ -367,13 +367,14 @@ export const RESTAURANT_INFO = {
     en: "Full refund up to 48 hours before service. 50% refund 24–48 hours before. No refund within 24 hours; no-shows are charged in full.",
     ja: "ご来店48時間前までのキャンセルは全額返金。24〜48時間前のキャンセルは50%返金。24時間を切ってからのキャンセル・当日ご不来場は全額申し受けます。",
   },
-  // Used when RESERVATIONS_DEPOSIT_REQUIRED=false. The deposit-flow copy
-  // above mentions refunds and no-show charges that don't apply when
-  // there's no payment to refund — would mislead guests in the deposit-
-  // free deployment.
+  // Used when RESERVATIONS_DEPOSIT_REQUIRED=false (no online Stripe charge —
+  // the booking is confirmed immediately). A 50% deposit still applies, but
+  // it is arranged manually: staff reach out after booking to collect it.
+  // This avoids the Stripe deposit-flow copy (pending_payment, auto-refund
+  // tiers) which doesn't match the manual collection.
   cancellationDepositFree: {
-    en: "Plans change — cancel any time via the link in your confirmation email. No deposit, no cancellation fee.",
-    ja: "ご都合が変わった場合、確認メール内のキャンセルリンクから 24 時間 365 日承ります。デポジット・キャンセル料はございません。",
+    en: "A 50% deposit secures your seat — our team will reach out to arrange it. If your plans change, cancel any time via the link in your confirmation email.",
+    ja: "お席の確保のため50%のデポジットを頂戴します（ご予約後にスタッフよりご案内）。ご都合が変わった場合は確認メール内のリンクからいつでも承ります。",
   },
   mapEmbedUrl: CONTACT.mapEmbedUrl,
   mapPinHref: CONTACT.mapLinkUrl,
