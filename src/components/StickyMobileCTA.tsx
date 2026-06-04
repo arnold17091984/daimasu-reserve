@@ -9,39 +9,49 @@ export default function StickyMobileCTA() {
   const { t } = useLang();
   const [visible, setVisible] = useState(false);
 
-  // Hero 지나면 노출, reservation 섹션/Send 버튼 접근 시 숨김
+  // Always visible while browsing; hidden only when the reservation form /
+  // its submit button is on screen, so the bar never covers the form.
   useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY;
+    const compute = () => {
       const sendBtn =
         document.querySelector<HTMLElement>("button[type='submit']");
       const reservation = document.getElementById("reservation");
       const winH = window.innerHeight;
 
-      let shouldHide = false;
+      let atForm = false;
       if (sendBtn) {
         const r = sendBtn.getBoundingClientRect();
-        // Send 버튼이 뷰포트 진입 영역에 있으면 sticky 숨김 (가림 방지)
-        if (r.top < winH - 100 && r.bottom > -50) shouldHide = true;
+        // Submit button entering the viewport → hide (avoid covering it).
+        if (r.top < winH - 100 && r.bottom > -50) atForm = true;
       }
       if (reservation) {
         const r = reservation.getBoundingClientRect();
-        // Reservation 섹션이 뷰포트 중앙 이상 들어오면 숨김
-        if (r.top < winH * 0.5) shouldHide = true;
+        // Reservation section past mid-viewport → hide.
+        if (r.top < winH * 0.5) atForm = true;
       }
 
-      setVisible(y > 600 && !shouldHide);
+      setVisible(!atForm);
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    compute();
+    window.addEventListener("scroll", compute, { passive: true });
+    window.addEventListener("resize", compute, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", compute);
+      window.removeEventListener("resize", compute);
+    };
   }, []);
 
   return (
     <div
-      className={`fixed bottom-0 left-0 right-0 z-40 flex gap-2 border-t border-border-gold bg-background/95 p-3 backdrop-blur transition-transform duration-300 md:hidden ${
+      className={`fixed left-0 right-0 z-40 flex gap-2 border-t border-border-gold bg-background/95 p-3 backdrop-blur transition-transform duration-300 md:hidden ${
         visible ? "translate-y-0" : "translate-y-full"
       }`}
+      style={{
+        // Sit above the cookie banner (which publishes its height) so the two
+        // never overlap; drops to the screen edge once consent is dismissed.
+        bottom: "var(--cookie-banner-h, 0px)",
+        paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))",
+      }}
       aria-hidden={!visible}
     >
       <a

@@ -13,7 +13,7 @@
  * defensible lawful basis for any non-essential cookie/tracker
  * (analytics included). The banner closes that gap.
  */
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLang } from "@/lib/language";
 
 const STORAGE_KEY = "daimasu_cookie_consent_v1";
@@ -50,11 +50,35 @@ export function CookieBanner() {
   );
   const [dismissed, setDismissed] = useState<Choice>(null);
   const choice = dismissed ?? stored;
+  const visible = choice === null;
 
-  if (choice !== null) return null;
+  const ref = useRef<HTMLDivElement>(null);
+  // Publish the banner height as a CSS var so the sticky mobile CTA can sit
+  // directly above it; reset to 0 once consent is given.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!visible) {
+      root.style.setProperty("--cookie-banner-h", "0px");
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const set = () =>
+      root.style.setProperty("--cookie-banner-h", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.setProperty("--cookie-banner-h", "0px");
+    };
+  }, [visible]);
+
+  if (!visible) return null;
 
   return (
     <div
+      ref={ref}
       role="dialog"
       aria-modal="false"
       aria-label="Cookie consent"
