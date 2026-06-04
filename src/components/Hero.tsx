@@ -80,15 +80,15 @@ export default function Hero() {
         />
         {/* Widescreen ambient: faint gold vertical lines (byobu-inspired), xl+ only */}
         <motion.div
-          animate={{ opacity: [0.2, 0.4, 0.2] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute left-[10%] top-1/2 hidden h-[400px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-gold/70 to-transparent xl:block"
+          animate={{ opacity: [0.05, 0.12, 0.05] }}
+          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          className="absolute left-[10%] top-1/2 hidden h-[320px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-gold/35 to-transparent xl:block"
           style={{ willChange: "opacity" }}
         />
         <motion.div
-          animate={{ opacity: [0.2, 0.4, 0.2] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 4 }}
-          className="absolute right-[10%] top-1/2 hidden h-[400px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-gold/70 to-transparent xl:block"
+          animate={{ opacity: [0.05, 0.12, 0.05] }}
+          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut", delay: 4 }}
+          className="absolute right-[10%] top-1/2 hidden h-[320px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-gold/35 to-transparent xl:block"
           style={{ willChange: "opacity" }}
         />
       </div>
