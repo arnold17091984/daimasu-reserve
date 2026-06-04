@@ -368,13 +368,13 @@ export const RESTAURANT_INFO = {
     ja: "ご来店48時間前までのキャンセルは全額返金。24〜48時間前のキャンセルは50%返金。24時間を切ってからのキャンセル・当日ご不来場は全額申し受けます。",
   },
   // Used when RESERVATIONS_DEPOSIT_REQUIRED=false (no online Stripe charge —
-  // the booking is confirmed immediately). A 50% deposit still applies, but
-  // it is arranged manually: staff reach out after booking to collect it.
-  // This avoids the Stripe deposit-flow copy (pending_payment, auto-refund
-  // tiers) which doesn't match the manual collection.
+  // the booking is confirmed immediately). A 50% deposit still applies but is
+  // arranged manually: staff reach out after booking. Same "deposit framing"
+  // (quality-control / seat-security, not a burden, standard for premium
+  // dining) used in ReservationForm / confirm page / emails — keep aligned.
   cancellationDepositFree: {
-    en: "A 50% deposit secures your seat — our team will reach out to arrange it. If your plans change, cancel any time via the link in your confirmation email.",
-    ja: "お席の確保のため50%のデポジットを頂戴します（ご予約後にスタッフよりご案内）。ご都合が変わった場合は確認メール内のリンクからいつでも承ります。",
+    en: "A 50% deposit secures your seat — a quality-control measure standard to premium dining and special-occasion bookings that protects genuine reservations, not a hurdle. Our team will reach out to arrange it (bank transfer / GCash / cash).",
+    ja: "お席の確保のため50%のデポジットを頂戴します。プレミアムダイニングや特別な機会のご予約では一般的で、本気でご来店をお考えのお客様のお席をお守りする仕組みです（ご負担をおかけするものではありません）。お支払いはご予約後にスタッフより別途ご案内いたします（銀行振込 / GCash / 現金）。",
   },
   mapEmbedUrl: CONTACT.mapEmbedUrl,
   mapPinHref: CONTACT.mapLinkUrl,
