@@ -34,7 +34,7 @@ export default function Hero() {
             first paint before the reel buffers. */}
         <div
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url(/videos/hero-poster.jpg)" }}
+          style={{ backgroundImage: "url(/videos/hero-hl-poster.jpg)" }}
         />
         {/* Full-bleed reel — object-cover fills the hero edge-to-edge on
             mobile (perfect 9:16) and desktop (centre-cropped). Always covers
@@ -46,10 +46,14 @@ export default function Hero() {
           loop
           playsInline
           preload="metadata"
-          poster="/videos/hero-poster.jpg"
+          poster="/videos/hero-hl-poster.jpg"
         >
-          <source src="/videos/hero-reel-720.mp4" media="(max-width: 768px)" type="video/mp4" />
-          <source src="/videos/hero-reel-1080.mp4" type="video/mp4" />
+          {/* Mobile (≤768px): smallest first — VP9 WebM, H.264 fallback. */}
+          <source src="/videos/hero-hl-720.webm" media="(max-width: 768px)" type="video/webm" />
+          <source src="/videos/hero-hl-720.mp4" media="(max-width: 768px)" type="video/mp4" />
+          {/* Desktop: VP9 WebM (Chrome/Edge/FF/Safari 14+), H.264 long-tail fallback. */}
+          <source src="/videos/hero-hl-1080.webm" type="video/webm" />
+          <source src="/videos/hero-hl-1080.mp4" type="video/mp4" />
         </video>
         {/* Darken so body/price/CTA text keeps contrast over bright scenes. */}
         <div className="absolute inset-0 bg-black/55" />

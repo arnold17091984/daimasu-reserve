@@ -56,3 +56,5 @@ lh-*.html
 /*.fig
 /.playwright-mcp/
 /Daimasu_Japanese_Bar_Reel_2_v3.mp4
+.gstack/
+/Daimasu Japanese Bar_Short_Highlights.mp4
